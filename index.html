@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAARJSURBVFhHzZdrSFRhAMf/J8U0oSiM6MMgI4qKIKKLoogugii6aJdWFtKLy/Qy295sS2mW2TabybRt82g2W1pm2dYtOyvKMP2A1IJIwzS0/Ifz/3DOybmzu3sD54GDw33u+c53z3cuFwD472Msv44kK+S4dERm2F65/vY6P26IeYy6Nlskf11gT/sPTG22s992u7V/X16+bO/U+x48evvX1xYDAH8PzM8v22y2f/3t3X8ePHy+y8QzD2B/Dwyf+2x2j69e/vTp08/Ozs73KxsbD738fHl4ePj13/f3b25ubn5+d/frs0f/fXZ7e5fA/wLMDw/3u8fH37/7/f379+9/f3p6+pG2tnZgZWX1xsbGxs7Ors7Ozp/u73/68OGjmzdvfu/v3//v2bMXgP+h2d3d3d7eHh4eHh4eHn51dXV9Z2eXkZERHR0dFxcXAwMDcXFxkZGRkZGRkZWVlZSU5Ofnb968efvYsWPHjh07fvz48cOHD58/f/706dPh4eH5+fkvf/78+d//jY3hPzY2hv+ZmREwP+cZwPAgHx/y9PTg8CDw8CAnJ6enp6ePjw8PDw8PD4+Pj4+JiYmIiIiIiIiIiAgLCwsLCwsLCwsMDAwLCwsMDAwICAgICAgICAgPDw8PDw8ICAgICAiIiIiIiIiIiIiIiIiIiIiIiIiIiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg-pYIAAAAASUVORK5CYII=" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2563EB" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>MakètUp</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class', // Enable dark mode
+        theme: {
+          extend: {
+            colors: {
+              primary: '#2563EB', // Light Blue from user prompt
+              'accent-teal': '#14B8A6',
+              'accent-sky': '#38BDF8',
+              'neutral-light': '#F3F4F6',
+              'neutral-dark': '#374151',
+              'neutral-medium': '#6B7280',
+              success: '#22C55E',
+              warning: '#FACC15',
+              error: '#EF4444',
+            }
+          }
+        }
+      }
+    </script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.1.1/",
+    "react": "https://aistudiocdn.com/react@^19.1.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.1.1",
+    "recharts": "https://aistudiocdn.com/recharts@^3.2.1",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.1",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^0.23.0"
+  }
+}
+</script>
+<style>
+  html {
+    scroll-behavior: smooth;
+    font-size: 14px; /* Base font size for mobile */
+  }
+
+  /* --- RESPONSIVE TYPOGRAPHY --- */
+  @media (min-width: 768px) { /* md breakpoint for tablets */
+      html {
+          font-size: 15px;
+      }
+  }
+
+  @media (min-width: 1024px) { /* lg breakpoint for desktops */
+      html {
+          font-size: 16px; /* Standard base font size for desktop */
+      }
+  }
+  /* --- END RESPONSIVE TYPOGRAPHY --- */
+  
+  /* --- Search input icon overlap fix --- */
+  .relative > div + input {
+    padding-left: 2.5rem !important;
+  }
+
+  /* --- Consistent Input Field Styling --- */
+  input,
+  textarea,
+  select {
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    background-color: white !important;
+    border: 1px solid #d1d5db !important; /* Tailwind gray-300 */
+    border-radius: 0.5rem !important; /* rounded-lg */
+    color: #374151 !important; /* neutral-dark */
+    padding: 0.625rem 0.75rem !important;
+    transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s, color 0.2s;
+    font-size: 1rem;
+    line-height: 1.5rem;
+    width: 100%;
+  }
+
+  .dark input,
+  .dark textarea,
+  .dark select {
+    background-color: #374151 !important; /* neutral-dark */
+    border-color: #4b5563 !important; /* gray-600 */
+    color: #f3f4f6 !important; /* neutral-light */
+  }
+
+  /* Placeholder Styling */
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af !important; /* Tailwind gray-400 */
+    opacity: 1 !important;
+  }
+  
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+      color: #6b7280 !important; /* neutral-medium */
+  }
+  
+  /* Remove old global focus and apply a new one */
+  *:focus, *:focus-visible {
+    outline: none !important;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    border-color: #14B8A6 !important; /* accent-teal */
+    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.2) !important;
+    position: relative;
+    z-index: 10;
+  }
+
+  .dark input:focus,
+  .dark select:focus,
+  .dark textarea:focus {
+    border-color: #14B8A6 !important; /* accent-teal */
+    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.3) !important;
+  }
+
+  /* Destructive action focus state */
+  input.destructive-focus:focus {
+    border-color: #EF4444 !important; /* error color */
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+  }
+
+  /* Input Group Overrides for composite inputs like phone number */
+  .input-group > input,
+  .input-group > select {
+    border-radius: 0 !important;
+  }
+  .input-group > *:first-child {
+    border-top-left-radius: 0.5rem !important;
+    border-bottom-left-radius: 0.5rem !important;
+  }
+  .input-group > *:last-child {
+    border-top-right-radius: 0.5rem !important;
+    border-bottom-right-radius: 0.5rem !important;
+  }
+  .input-group > *:not(:first-child) {
+    margin-left: -1px !important;
+  }
+  .input-group > *:focus {
+    z-index: 20;
+  }
+  /* --- End of New Input Styles --- */
+  
+  /* Custom styling for select dropdown arrows */
+  select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem !important;
+  }
+
+  .dark select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  }
+
+  @media print {
+    body * {
+      visibility: hidden;
+    }
+    /* The root of the modal we want to print */
+    .printable-area, .printable-area * {
+      visibility: visible;
+    }
+    .printable-area {
+      position: fixed !important; /* Use fixed to ensure it's always visible */
+      inset: 0 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      background: white !important; /* Ensure background is not transparent */
+      display: flex !important;
+      align-items: flex-start !important;
+      justify-content: center !important;
+      overflow: visible !important;
+    }
+    /* Style the modal content itself for printing */
+    .printable-area > div {
+      box-shadow: none !important;
+      border: none !important;
+      max-height: none !important;
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    /* Hide action buttons when printing */
+    .no-print {
+        display: none !important;
+    }
+    
+    /* Label Printing Styles */
+    body.printing-labels * {
+      visibility: hidden;
+    }
+    body.printing-labels #label-sheet-to-print,
+    body.printing-labels #label-sheet-to-print * {
+        visibility: visible !important;
+    }
+    body.printing-labels #label-sheet-to-print {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        padding: 0.5in; /* Standard page margins */
+        box-sizing: border-box;
+    }
+  }
+
+  /* --- RESPONSIVE BUTTON SYSTEM --- */
+    .btn-responsive,
+    .responsive-btn-group > button, .responsive-btn-group > .btn,
+    .responsive-btn-group-fill-horizontal > button, .responsive-btn-group-fill-horizontal > .btn {
+        padding: 0.875rem 1.5rem;
+        font-size: 1rem;
+        font-weight: 600;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        border-radius: 0.5rem;
+        transition: all 0.2s ease-in-out;
+        white-space: nowrap;
+        border: 1px solid transparent;
+    }
+    
+    .btn-responsive {
+        width: 100%;
+    }
+
+    .responsive-btn-group,
+    .responsive-btn-group-fill-horizontal {
+        display: flex;
+        width: 100%;
+        gap: 0.75rem;
+    }
+
+    /* Stacks buttons vertically on mobile */
+    .responsive-btn-group {
+        flex-direction: column;
+    }
+    
+    /* Makes buttons fill horizontal space on mobile */
+    .responsive-btn-group-fill-horizontal > button,
+    .responsive-btn-group-fill-horizontal > .btn {
+        flex: 1;
+    }
+
+    @media (min-width: 640px) { /* sm breakpoint */
+        .btn-responsive {
+            width: auto;
+        }
+        .responsive-btn-group,
+        .responsive-btn-group-fill-horizontal {
+            width: auto;
+            flex-direction: row;
+        }
+    }
+    /* --- END RESPONSIVE BUTTON SYSTEM --- */
+
+    /* For tabular numbers on receipts */
+    .tabular-nums {
+        font-feature-settings: 'tnum';
+        -webkit-font-feature-settings: 'tnum';
+        -moz-font-feature-settings: 'tnum';
+    }
+
+    .line-clamp-2 {
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+    }
+
+    .line-clamp-3 {
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+    }
+</style>
+</head>
+  <body class="bg-neutral-light font-sans dark:bg-gray-900">
+    <div id="root"></div>
+    <div id="modal-root"></div>
+    <!--
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('SW registered: ', registration);
+          }).catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+          });
+        });
+      }
+    </script>
+    -->
+  </body>
+</html>
