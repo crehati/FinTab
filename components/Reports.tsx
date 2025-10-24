@@ -189,8 +189,8 @@ const Reports: React.FC<ReportsProps> = ({ sales, products, expenses, customers,
     }, [filteredSales]);
 
     const soldBy = useMemo(() => {
-        // FIX: Explicitly typed the accumulator `acc` to resolve property access errors.
-        const staffSales = filteredSales.reduce((acc: Record<string, number>, sale) => {
+        // FIX: Use a generic type argument for `reduce` to correctly type the accumulator.
+        const staffSales = filteredSales.reduce<Record<string, number>>((acc, sale) => {
             const user = users.find(u => u.id === sale.userId);
             if (!user) return acc;
             
@@ -210,8 +210,8 @@ const Reports: React.FC<ReportsProps> = ({ sales, products, expenses, customers,
 
     const salesByPaymentMethod = useMemo(() => {
         if (filteredSales.length === 0) return [];
-        // FIX: Explicitly typed the accumulator `acc` to resolve property access errors.
-        const methods = filteredSales.reduce((acc: Record<string, { count: number; revenue: number; }>, sale) => {
+        // FIX: Use a generic type argument for `reduce` to correctly type the accumulator.
+        const methods = filteredSales.reduce<Record<string, { count: number; revenue: number; }>>((acc, sale) => {
             const method = sale.paymentMethod || 'Other';
             if (!acc[method]) {
                 acc[method] = { count: 0, revenue: 0 };
@@ -262,8 +262,8 @@ const Reports: React.FC<ReportsProps> = ({ sales, products, expenses, customers,
     }, [filteredSales]);
 
     const topCustomers = useMemo(() => {
-        // FIX: Explicitly typed the accumulator `acc` to resolve property access errors.
-        const customerSpending = filteredSales.reduce((acc: Record<string, { name: string; total: number }>, sale) => {
+        // FIX: Use a generic type argument for `reduce` to correctly type the accumulator.
+        const customerSpending = filteredSales.reduce<Record<string, { name: string; total: number }>>((acc, sale) => {
             const customer = customers.find(c => c.id === sale.customerId);
             const id = sale.customerId;
             if (!acc[id]) {

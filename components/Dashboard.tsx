@@ -128,8 +128,8 @@ const Dashboard: React.FC<DashboardProps> = (props) => {
 
     const transactionsByPaymentMethod = useMemo(() => {
         const completedSales = sales.filter(s => s.status === 'completed');
-        // FIX: Explicitly typed the accumulator `acc` to resolve an error where its properties were unknown.
-        const stats = completedSales.reduce((acc: Record<string, { count: number; total: number }>, sale) => {
+        // FIX: Use a generic type argument for `reduce` to correctly type the accumulator.
+        const stats = completedSales.reduce<Record<string, { count: number; total: number }>>((acc, sale) => {
             const method = sale.paymentMethod || 'Other';
             if (!acc[method]) {
                 acc[method] = { count: 0, total: 0 };

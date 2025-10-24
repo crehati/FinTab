@@ -104,8 +104,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ currentUser, sales, products,
     const todaysRevenue = useMemo(() => todaysSales.reduce((sum, sale) => sum + sale.total, 0), [todaysSales]);
     const lowStockProducts = useMemo(() => products.filter(p => p.stock > 0 && p.stock <= lowStockThreshold), [products, lowStockThreshold]);
     const topTodaysProduct = useMemo(() => {
-        // FIX: Explicitly typed the accumulator `acc` to resolve an arithmetic operation error.
-        const productQuantities = todaysSales.reduce((acc: Record<string, number>, sale) => {
+        // FIX: Use a generic type argument for `reduce` to correctly type the accumulator.
+        const productQuantities = todaysSales.reduce<Record<string, number>>((acc, sale) => {
             sale.items.forEach(item => {
                 acc[item.product.id] = (acc[item.product.id] || 0) + item.quantity;
             });

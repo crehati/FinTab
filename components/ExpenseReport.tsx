@@ -33,8 +33,8 @@ const ExpenseReport: React.FC<ExpenseReportProps> = ({ expenses, t, receiptSetti
     }, [expenses, startDate, endDate, selectedCategory]);
 
     const categoryTotals = useMemo(() => {
-        // FIX: Explicitly typed the accumulator `acc` to handle property access on `unknown`.
-        const totals = filteredExpenses.reduce((acc: Record<string, { totalAmount: number; count: number }>, expense) => {
+        // FIX: Use a generic type argument for `reduce` to correctly type the accumulator.
+        const totals = filteredExpenses.reduce<Record<string, { totalAmount: number; count: number }>>((acc, expense) => {
             if (!acc[expense.category]) {
                 acc[expense.category] = { totalAmount: 0, count: 0 };
             }

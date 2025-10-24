@@ -1,18 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { Product, ReceiptSettingsData, ProductVariant } from '../types';
 import { formatCurrency } from '../lib/utils';
@@ -149,9 +134,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
         setFormData(prev => ({ ...prev, variantOptions: newOptions }));
     };
 
-    // FIX: The accumulator type in this reduce function changes during execution, causing a TypeScript error.
-    // Casting `a` to `any[]` resolves this type mismatch.
-    const cartesian = (...a: string[][]) => (a as any[]).reduce((acc: any[], val) => acc.flatMap((d: any) => val.map((e: any) => [d, e].flat())));
+    const cartesian = (...a: string[][]): string[][] => a.reduce((acc: string[][], val: string[]) => acc.flatMap((d: string[]) => val.map((e: string) => [...d, e])), [[]]);
 
     const generateVariants = () => {
         if (!formData.variantOptions || formData.variantOptions.some(opt => opt.values.length === 0 || !opt.name.trim())) {
@@ -159,11 +142,16 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
             return;
         }
 
-        const optionValuesArrays = formData.variantOptions.map(opt => opt.values);
+        const optionValuesArrays = formData.variantOptions.map(opt => opt.values).filter(arr => arr.length > 0);
+        if (optionValuesArrays.length === 0) {
+            setFormData(prev => ({ ...prev, variants: [] }));
+            return;
+        }
+
         const combinations = cartesian(...optionValuesArrays);
 
-        const newVariants: ProductVariant[] = combinations.map((combo: any) => {
-            const attributes = (Array.isArray(combo) ? combo : [combo]).map((value: string, index: number) => ({
+        const newVariants: ProductVariant[] = combinations.map((combo: string[]) => {
+            const attributes = combo.map((value: string, index: number) => ({
                 name: formData.variantOptions![index].name,
                 value,
             }));

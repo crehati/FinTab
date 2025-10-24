@@ -27,12 +27,9 @@ const Today: React.FC<TodayProps> = ({ sales, customers, expenses, products, t, 
     [todaysSales]);
     
     const todaysGrossProfit = useMemo(() => {
-        // FIX: Explicitly typed `totalProfit` to resolve type inference errors.
         return todaysSales.reduce((totalProfit: number, sale) => {
             const saleRevenue = sale.subtotal - sale.discount;
-            // FIX: Explicitly typed the accumulator 'cogs' as a number to resolve an arithmetic operation error.
             const costOfGoodsSold = sale.items.reduce((cogs: number, item) => {
-                // FIX: Look up product from the main products list to ensure costPrice is up-to-date.
                 const product = products.find(p => p.id === item.product.id);
                 const costPrice = product ? product.costPrice : 0;
                 return cogs + (costPrice * item.quantity);
@@ -56,8 +53,8 @@ const Today: React.FC<TodayProps> = ({ sales, customers, expenses, products, t, 
     [todaysSales]);
 
     const topTodaysProducts = useMemo(() => {
-        // FIX: Explicitly typed the accumulator `acc` to resolve an arithmetic operation error.
-        const productQuantities = todaysSales.reduce((acc: Record<string, number>, sale) => {
+        // FIX: Use a generic type argument for `reduce` to correctly type the accumulator.
+        const productQuantities = todaysSales.reduce<Record<string, number>>((acc, sale) => {
             sale.items.forEach(item => {
                 acc[item.product.id] = (acc[item.product.id] || 0) + item.quantity;
             });
@@ -80,8 +77,8 @@ const Today: React.FC<TodayProps> = ({ sales, customers, expenses, products, t, 
         if (todaysSales.length === 0) {
             return null;
         }
-        // FIX: Explicitly typed the accumulator `acc` to resolve an arithmetic operation error.
-        const categoryQuantities = todaysSales.reduce((acc: Record<string, number>, sale) => {
+        // FIX: Use a generic type argument for `reduce` to correctly type the accumulator.
+        const categoryQuantities = todaysSales.reduce<Record<string, number>>((acc, sale) => {
             sale.items.forEach(item => {
                 const product = products.find(p => p.id === item.product.id);
                 if (product) {
