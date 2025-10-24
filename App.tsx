@@ -305,7 +305,7 @@ const MainLayout: React.FC<{
     const navigate = useNavigate();
 
     const location = useLocation();
-    const title = pageTitles[location.pathname] || businessProfile?.businessName || 'MakètUp';
+    const title = pageTitles[location.pathname] || businessProfile?.businessName || 'FinTab';
     
     const rootPaths = [
         '/',
@@ -405,7 +405,7 @@ const MainLayout: React.FC<{
                         ) : (
                             !isRootPath && <GoBackButton />
                         )}
-                        <h1 className={`font-bold text-neutral-dark dark:text-gray-100 ${isMobile ? 'text-xl' : 'text-3xl'}`}>{isMobile ? (businessProfile?.businessName || 'MakètUp') : title}</h1>
+                        <h1 className={`font-bold text-neutral-dark dark:text-gray-100 ${isMobile ? 'text-xl' : 'text-3xl'}`}>{isMobile ? (businessProfile?.businessName || 'FinTab') : title}</h1>
                     </div>
                     <div className="flex items-center gap-3">
                          {!isMobile && hasAccess(currentUser, '/counter', 'view', permissions) && (
@@ -516,12 +516,12 @@ const MainLayout: React.FC<{
 // --- NEW Business-aware LocalStorage Helper Functions ---
 const getBusinessStoredItem = <T,>(businessId: string, key: string, defaultValue: T): T => {
     if (!businessId) return defaultValue;
-    return getStoredItem(`marketup_${businessId}_${key}`, defaultValue);
+    return getStoredItem(`fintab_${businessId}_${key}`, defaultValue);
 };
 
 const setBusinessStoredItem = (businessId: string, key: string, value: any): void => {
     if (!businessId) return;
-    setStoredItem(`marketup_${businessId}_${key}`, value);
+    setStoredItem(`fintab_${businessId}_${key}`, value);
 };
 
 
@@ -531,13 +531,13 @@ const App: React.FC = () => {
     const navigate = useNavigate();
 
     // --- Multi-Business State Management ---
-    const [businesses, setBusinesses] = useState<AdminBusinessData[]>(() => getStoredItem('marketup_businesses_registry', []));
-    const [currentBusinessId, setCurrentBusinessId] = useState<string | null>(() => getStoredItem('marketup_currentBusinessId', null));
+    const [businesses, setBusinesses] = useState<AdminBusinessData[]>(() => getStoredItem('fintab_businesses_registry', []));
+    const [currentBusinessId, setCurrentBusinessId] = useState<string | null>(() => getStoredItem('fintab_currentBusinessId', null));
     const isInitialSetupDone = businesses.length > 0;
 
     // --- Global (non-business specific) State ---
-    const [theme, setTheme] = useState<'light' | 'dark'>(() => getStoredItem('marketup_theme', 'light'));
-    const [currentUser, setCurrentUser] = useState<User | null>(() => getStoredItem('marketup_current_user', null));
+    const [theme, setTheme] = useState<'light' | 'dark'>(() => getStoredItem('fintab_theme', 'light'));
+    const [currentUser, setCurrentUser] = useState<User | null>(() => getStoredItem('fintab_current_user', null));
 
     // --- Business-Specific State (loaded dynamically) ---
     const [language, setLanguage] = useState('en');
@@ -600,10 +600,10 @@ const App: React.FC = () => {
     }, [currentBusinessId, businesses]);
 
     // --- Data Persistence Effects (now business-aware) ---
-    useEffect(() => { setStoredItem('marketup_businesses_registry', businesses); }, [businesses]);
-    useEffect(() => { setStoredItem('marketup_currentBusinessId', currentBusinessId); }, [currentBusinessId]);
-    useEffect(() => { setStoredItem('marketup_current_user', currentUser); }, [currentUser]);
-    useEffect(() => { setStoredItem('marketup_theme', theme); }, [theme]);
+    useEffect(() => { setStoredItem('fintab_businesses_registry', businesses); }, [businesses]);
+    useEffect(() => { setStoredItem('fintab_currentBusinessId', currentBusinessId); }, [currentBusinessId]);
+    useEffect(() => { setStoredItem('fintab_current_user', currentUser); }, [currentUser]);
+    useEffect(() => { setStoredItem('fintab_theme', theme); }, [theme]);
     // Namespaced useEffects
     useEffect(() => { if (currentBusinessId) setBusinessStoredItem(currentBusinessId, 'language', language); }, [language, currentBusinessId]);
     useEffect(() => { if (currentBusinessId) setBusinessStoredItem(currentBusinessId, 'products', products); }, [products, currentBusinessId]);
@@ -872,7 +872,7 @@ const App: React.FC = () => {
             if (currentBusinessId) {
                 // Find all keys for this business and remove them
                 Object.keys(localStorage).forEach(key => {
-                    if (key.startsWith(`marketup_${currentBusinessId}`)) {
+                    if (key.startsWith(`fintab_${currentBusinessId}`)) {
                         localStorage.removeItem(key);
                     }
                 });

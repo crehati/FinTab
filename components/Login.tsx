@@ -23,7 +23,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         <div className="flex items-center justify-center min-h-screen bg-neutral-light dark:bg-gray-900 p-4">
             <div className="w-full max-w-md p-8 space-y-6 bg-white dark:bg-gray-800 rounded-2xl shadow-xl">
                 <div className="text-center">
-                    <h1 className="text-4xl font-bold tracking-wider text-primary">MakètUp</h1>
+                    <h1 className="text-4xl font-bold tracking-wider text-primary">FinTab</h1>
                     <p className="mt-2 text-neutral-medium dark:text-gray-400">Smart, Simple, and Professional POS for Your Business</p>
                 </div>
                 <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
@@ -74,7 +74,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </div>
                      <div className="text-center text-sm text-gray-500 dark:text-gray-400 space-y-2">
                         <p>Hint: For the demo account, log in with: <br />
-                            <span className="font-mono">owner@marketup.com</span> / <span className="font-mono">password</span>
+                            <span className="font-mono">owner@fintab.com</span> / <span className="font-mono">password</span>
                         </p>
                     </div>
                 </form>

@@ -164,7 +164,7 @@ const Sidebar: React.FC<SidebarProps> = ({ t, isOpen, setIsOpen, cart, currentUs
                             <img src={businessProfile.logo} alt="Business Logo" className="h-10 w-10 rounded-md object-contain flex-shrink-0" />
                         )}
                         <h1 className="text-2xl font-bold tracking-wider text-primary truncate">
-                            {businessProfile?.businessName || 'MakètUp'}
+                            {businessProfile?.businessName || 'FinTab'}
                         </h1>
                     </div>
                     <button onClick={() => setIsOpen(false)} className="md:hidden text-neutral-medium dark:text-gray-400 hover:text-primary" aria-label="Close sidebar">
@@ -182,7 +182,7 @@ const Sidebar: React.FC<SidebarProps> = ({ t, isOpen, setIsOpen, cart, currentUs
                     </div>
                 </nav>
                 <div className="p-4 border-t border-neutral-light dark:border-gray-700">
-                    <p className="text-sm text-neutral-medium dark:text-gray-500">&copy; 2024 MakètUp</p>
+                    <p className="text-sm text-neutral-medium dark:text-gray-500">&copy; 2024 FinTab</p>
                 </div>
             </aside>
         </>

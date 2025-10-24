@@ -279,6 +279,13 @@ export const CartIcon = () => (
     </svg>
 );
 
+export const CloudIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${className}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+    </svg>
+);
+
+
 // FIX: Added definitions for all missing dummy data
 export const DUMMY_PRODUCTS: Product[] = [
     { id: 'prod-1', name: 'Sourdough Bread', category: 'Bakery', price: 8, costPrice: 2, stock: 50, imageUrl: 'https://via.placeholder.com/150', commissionPercentage: 10 },
@@ -288,11 +295,11 @@ export const DUMMY_CUSTOMERS: Customer[] = [
     { id: 'cust-1', name: 'Alice Johnson', email: 'alice@example.com', phone: '123-456-7890', joinDate: new Date().toISOString(), purchaseHistory: [] },
 ];
 export const DUMMY_USERS: User[] = [
-    { id: 'user-1', name: 'Admin Owner', role: 'Owner', email: 'owner@marketup.com', password: 'password', avatarUrl: 'https://i.pravatar.cc/150?u=owner', type: 'commission' },
-    { id: 'user-2', name: 'Manager Mike', role: 'Manager', email: 'manager@marketup.com', password: 'password', avatarUrl: 'https://i.pravatar.cc/150?u=manager', type: 'commission' },
-    { id: 'user-3', name: 'Cashier Cathy', role: 'Cashier', email: 'cashier@marketup.com', password: 'password', avatarUrl: 'https://i.pravatar.cc/150?u=cashier', type: 'hourly', hourlyRate: 15 },
-    { id: 'user-4', name: 'Investor Ian', role: 'Investor', email: 'investor@marketup.com', password: 'password', avatarUrl: 'https://i.pravatar.cc/150?u=investor', type: 'commission', initialInvestment: 10000, investmentDate: new Date().toISOString() },
-    { id: 'user-super', name: 'Super Admin', role: 'Super Admin', email: 'super@marketup.com', password: 'password', avatarUrl: 'https://i.pravatar.cc/150?u=super', type: 'commission' },
+    { id: 'user-1', name: 'Admin Owner', role: 'Owner', email: 'owner@fintab.com', password: 'password', avatarUrl: 'https://i.pravatar.cc/150?u=owner', type: 'commission' },
+    { id: 'user-2', name: 'Manager Mike', role: 'Manager', email: 'manager@fintab.com', password: 'password', avatarUrl: 'https://i.pravatar.cc/150?u=manager', type: 'commission' },
+    { id: 'user-3', name: 'Cashier Cathy', role: 'Cashier', email: 'cashier@fintab.com', password: 'password', avatarUrl: 'https://i.pravatar.cc/150?u=cashier', type: 'hourly', hourlyRate: 15 },
+    { id: 'user-4', name: 'Investor Ian', role: 'Investor', email: 'investor@fintab.com', password: 'password', avatarUrl: 'https://i.pravatar.cc/150?u=investor', type: 'commission', initialInvestment: 10000, investmentDate: new Date().toISOString() },
+    { id: 'user-super', name: 'Super Admin', role: 'Super Admin', email: 'super@fintab.com', password: 'password', avatarUrl: 'https://i.pravatar.cc/150?u=super', type: 'commission' },
 ];
 export const DUMMY_SALES: Sale[] = [
     { id: 'sale-1', date: new Date().toISOString(), items: [{ product: DUMMY_PRODUCTS[0], quantity: 2 }], customerId: 'cust-1', userId: 'user-3', subtotal: 16, tax: 1.28, discount: 0, total: 17.28, paymentMethod: 'Cash', status: 'completed' }
@@ -330,7 +337,7 @@ export const DUMMY_ADMIN_BUSINESS_DATA: AdminBusinessData[] = [
             enrollmentDate: '2022-08-15',
             trialEndDate: '2022-09-14',
         },
-        owner: { name: 'Admin Owner', email: 'owner@marketup.com' },
+        owner: { name: 'Admin Owner', email: 'owner@fintab.com' },
         stats: { totalRevenue: 125430.50, salesCount: 8430, userCount: 5, joinedDate: '2022-08-15', status: 'Active' },
     }
 ];

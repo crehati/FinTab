@@ -1,3 +1,9 @@
+export interface Syncable {
+  syncStatus?: 'pending' | 'synced';
+  lastUpdated?: string;
+  isDeleted?: boolean;
+}
+
 export interface StockAdjustment {
   date: string;
   userId: string;
@@ -7,7 +13,7 @@ export interface StockAdjustment {
   newStockLevel: number;
 }
 
-export interface BusinessSettingsData {
+export type BusinessSettingsData = Syncable & {
   paymentMethods: string[];
   defaultTaxRate: number;
   rounding: {
@@ -22,7 +28,7 @@ export interface BusinessSettingsData {
   acceptRemoteOrders?: boolean;
 }
 
-export interface BusinessProfile {
+export type BusinessProfile = Syncable & {
     id?: string;
     businessName: string;
     dateEstablished: string;
@@ -55,7 +61,7 @@ export interface ProductVariant {
   sku?: string;
 }
 
-export interface Product {
+export type Product = Syncable & {
   id: string;
   name: string;
   description?: string;
@@ -72,7 +78,7 @@ export interface Product {
   variants?: ProductVariant[];
 }
 
-export interface Customer {
+export type Customer = Syncable & {
   id: string;
   name: string;
   email: string;
@@ -105,7 +111,7 @@ export interface CustomPayment {
     notes?: string;
 }
 
-export interface Deposit {
+export type Deposit = Syncable & {
     id: string;
     date: string;
     amount: number;
@@ -116,7 +122,7 @@ export interface Deposit {
 
 export type Role = 'Owner' | 'Manager' | 'Cashier' | 'Investor' | 'SellerAgent' | 'Super Admin' | 'Custom';
 
-export interface User {
+export type User = Syncable & {
   id: string;
   name: string;
   role: Role;
@@ -148,13 +154,13 @@ export type PerformanceUser = User & {
     totalInvestmentWithdrawals: number;
 };
 
-export interface CartItem {
+export type CartItem = {
   product: Product;
   variant?: ProductVariant;
   quantity: number;
 }
 
-export interface Sale {
+export type Sale = Syncable & {
   id: string;
   date: string;
   items: CartItem[];
@@ -174,7 +180,7 @@ export interface Sale {
   businessId?: string;
 }
 
-export interface Expense {
+export type Expense = Syncable & {
   id: string;
   date: string;
   category: string;
@@ -182,7 +188,7 @@ export interface Expense {
   amount: number;
 }
 
-export interface ExpenseRequest {
+export type ExpenseRequest = Syncable & {
   id: string;
   date: string;
   userId: string;
@@ -194,11 +200,11 @@ export interface ExpenseRequest {
   notes?: string;
 }
 
-export interface PrinterSettingsData {
+export type PrinterSettingsData = Syncable & {
   autoPrint: boolean;
 }
 
-export interface ReceiptSettingsData {
+export type ReceiptSettingsData = Syncable & {
   logo: string | null; // Base64 string or URL
   businessName: string;
   slogan: string;
@@ -263,7 +269,7 @@ export interface CompanyValuation {
   value: number;
 }
 
-export interface OwnerSettings {
+export type OwnerSettings = Syncable & {
   commissionTrackingEnabled: boolean;
   includeInStaffReports: boolean;
   showOnLeaderboard: boolean;
@@ -317,7 +323,7 @@ export type UserPermissions = {
     [path: string]: PermissionSet;
 };
 
-export interface AppPermissions {
+export type AppPermissions = Syncable & {
     roles: Partial<Record<Role, UserPermissions>>;
     users: Record<string, UserPermissions>; // UserID -> UserPermissions (overrides)
 }

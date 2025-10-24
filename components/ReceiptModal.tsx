@@ -543,7 +543,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose, receiptSetti
                             </div>
                              {isTrialExpired && (
                                 <div className="text-center mt-4 pt-4 border-t border-dashed">
-                                    <p className="text-xs text-gray-500 font-sans">Powered by MakètUp</p>
+                                    <p className="text-xs text-gray-500 font-sans">Powered by FinTab</p>
                                 </div>
                             )}
                         </div>

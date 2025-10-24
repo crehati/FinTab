@@ -12,7 +12,7 @@ const LoginPortal: React.FC<LoginPortalProps> = ({ hasBusinesses }) => {
         <div className="flex items-center justify-center min-h-screen bg-neutral-light dark:bg-gray-900 p-4">
             <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-gray-800 rounded-2xl shadow-xl text-center">
                 <div>
-                    <h1 className="text-4xl font-bold tracking-wider text-primary">MakètUp</h1>
+                    <h1 className="text-4xl font-bold tracking-wider text-primary">FinTab</h1>
                     <p className="mt-2 text-neutral-medium dark:text-gray-400">Please select your login type.</p>
                 </div>
                 

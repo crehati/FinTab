@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import type { User, AdminBusinessData, LicensingInfo } from '../types';
@@ -87,7 +85,7 @@ const AdminSidebar: React.FC<{ activeView: AdminView; setActiveView: (view: Admi
     return (
         <aside className="w-64 bg-gray-800 text-gray-300 flex flex-col">
             <div className="h-20 flex items-center justify-center text-2xl font-bold text-white tracking-wider">
-                MakètUp Admin
+                FinTab Admin
             </div>
             <nav className="flex-1 px-4 py-6 space-y-2">
                 {navItems.map(item => (
@@ -308,10 +306,10 @@ interface AdminDashboardProps {
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, onLogout }) => {
     const [activeView, setActiveView] = useState<AdminView>('businesses');
-    const [businesses, setBusinesses] = useState(() => getStoredItem('marketup_admin_businesses', DUMMY_ADMIN_BUSINESS_DATA));
+    const [businesses, setBusinesses] = useState(() => getStoredItem('fintab_admin_businesses', DUMMY_ADMIN_BUSINESS_DATA));
     
     useEffect(() => {
-        setStoredItem('marketup_admin_businesses', businesses);
+        setStoredItem('fintab_admin_businesses', businesses);
     }, [businesses]);
 
     const viewTitles: Record<AdminView, string> = {

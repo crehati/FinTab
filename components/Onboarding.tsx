@@ -144,11 +144,11 @@ const Onboarding: React.FC<OnboardingProps> = ({ onFinish, onSwitchToLogin, onSk
 
 // --- Step Components ---
 
-const MaketUpLogo = ({ className }: { className?: string }) => (
+const FinTabLogo = ({ className }: { className?: string }) => (
     <svg viewBox="0 0 200 50" className={className} xmlns="http://www.w3.org/2000/svg">
         <text x="0" y="40" fontFamily="Arial, sans-serif" fontSize="45" fontWeight="bold" fill="currentColor" className="text-primary dark:text-accent-sky">
-            Makèt
-            <tspan fill="currentColor" className="text-neutral-dark dark:text-gray-200">Up</tspan>
+            Fin
+            <tspan fill="currentColor" className="text-neutral-dark dark:text-gray-200">Tab</tspan>
         </text>
     </svg>
 );
@@ -176,7 +176,7 @@ const WelcomeScreen: React.FC<{ onNext: () => void; onSwitchToLogin: () => void;
         <div className="grid lg:grid-cols-2 gap-12 items-center">
             <Illustration />
             <div className="flex flex-col items-center lg:items-start text-center lg:text-left">
-                <MaketUpLogo className="h-12 w-auto mb-4" />
+                <FinTabLogo className="h-12 w-auto mb-4" />
                 <h1 className="text-3xl lg:text-4xl font-bold text-neutral-dark dark:text-gray-100">
                     Smart, Simple, and Professional POS for Your Business.
                 </h1>

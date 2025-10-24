@@ -1,5 +1,5 @@
 {
-  "name": "MakètUp - Point of Sale",
+  "name": "FinTab - Point of Sale",
   "description": "A comprehensive Point of Sale (POS) application to streamline business operations, from inventory and customer management to staff commissions and financial reporting. Features a modern dashboard, storefront, and robust management tools.",
   "requestFramePermissions": [
     "camera",

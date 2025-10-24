@@ -1,4 +1,4 @@
-const CACHE_NAME = 'marketup-cache-v1';
+const CACHE_NAME = 'fintab-cache-v1';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
