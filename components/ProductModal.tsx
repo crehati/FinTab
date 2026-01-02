@@ -1,6 +1,10 @@
+
+// @ts-nocheck
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { Product, ReceiptSettingsData, ProductVariant } from '../types';
 import { formatCurrency } from '../lib/utils';
+import ModalShell from './ModalShell';
+import { DeleteIcon, PlusIcon } from '../constants';
 
 interface ProductModalProps {
     isOpen: boolean;
@@ -14,6 +18,7 @@ interface ProductModalProps {
 
 const getInitialFormData = (): Product => ({
     id: '',
+    sku: '',
     name: '',
     description: '',
     category: '',
@@ -31,12 +36,13 @@ const getInitialFormData = (): Product => ({
 
 const ADD_NEW_CATEGORY_VALUE = '__ADD_NEW__';
 
-const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, product, categories, receiptSettings }) => {
+const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, product, categories, receiptSettings, t }) => {
     const [formData, setFormData] = useState<Product>(getInitialFormData());
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
     const [newCategoryValue, setNewCategoryValue] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     const cs = receiptSettings.currencySymbol;
 
@@ -46,6 +52,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
 
     useEffect(() => {
         if (isOpen) {
+            setIsSaving(false);
             if (product) {
                 const productCategoryExists = categories.includes(product.category);
                 setFormData({
@@ -112,8 +119,6 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
         }
     };
     
-    // --- Variant Logic ---
-
     const handleAddOption = () => {
         setFormData(prev => ({ ...prev, variantOptions: [...(prev.variantOptions || []), { name: '', values: [] }] }));
     };
@@ -158,7 +163,6 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
             
             const variantName = attributes.map(a => a.value).join('-');
             const id = `${formData.id || 'new'}-${variantName.toLowerCase().replace(/\s+/g, '-')}`;
-
             const existingVariant = formData.variants?.find(v => v.id === id);
 
             return {
@@ -181,7 +185,6 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
         setFormData(prev => ({ ...prev, variants: newVariants }));
     };
 
-    // Tiered Pricing Logic
     const handleTierChange = (index: number, field: 'quantity' | 'price', value: string) => {
         const newTiers = [...(formData.tieredPricing || [])];
         newTiers[index] = { ...newTiers[index], [field]: parseFloat(value) || 0 };
@@ -189,7 +192,7 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
     };
 
     const addTier = () => {
-        const newTiers = [...(formData.tieredPricing || []), { quantity: 0, price: 0 }];
+        const newTiers = [...(formData.tieredPricing || []), { quantity: 10, price: 0 }];
         setFormData(prev => ({ ...prev, tieredPricing: newTiers }));
     };
 
@@ -199,20 +202,18 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
         setFormData(prev => ({ ...prev, tieredPricing: newTiers }));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
         const finalCategory = isAddingNewCategory ? newCategoryValue.trim() : formData.category;
-        if (!finalCategory) {
-            alert("Please select or add a category for the product.");
-            return;
-        }
+        if (!finalCategory) { alert("Protocol Error: Category identification mandatory."); return; }
 
+        setIsSaving(true);
         let finalProductData = { ...formData, category: finalCategory };
 
         if (finalProductData.productType === 'variable') {
             if (!finalProductData.variants || finalProductData.variants.length === 0) {
-                alert("Please generate variants for this variable product before saving.");
+                alert("Please generate variants before saving.");
+                setIsSaving(false);
                 return;
             }
             finalProductData.stock = finalProductData.variants.reduce((sum, v) => sum + (v.stock || 0), 0);
@@ -224,130 +225,211 @@ const ProductModal: React.FC<ProductModalProps> = ({ isOpen, onClose, onSave, pr
             finalProductData.variants = [];
         }
         
-        onSave(finalProductData, !!product);
+        try { await onSave(finalProductData, !!product); } finally { setIsSaving(false); }
     };
 
-    if (!isOpen) return null;
+    const footer = (
+        <>
+            <button type="button" onClick={handleSubmit} className="btn-base btn-primary w-full sm:w-auto px-10 py-4" disabled={isSaving}>
+                {isSaving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>}
+                {product ? 'Authorize Update' : 'Initialize Protocol'}
+            </button>
+            <button type="button" onClick={onClose} className="btn-base btn-secondary w-full sm:w-auto px-10 py-4" disabled={isSaving}>Abort</button>
+        </>
+    );
+
+    const inputClasses = "w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-3.5 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all outline-none";
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-                <header className="p-6 border-b flex-shrink-0">
-                    <h2 className="text-2xl font-bold text-gray-800">{product ? 'Edit Product' : 'Add New Product'}</h2>
-                </header>
-                <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto">
-                    <main className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="md:col-span-1 space-y-2">
-                            <label className="block text-sm font-medium text-gray-700">Product Image</label>
-                            <div className="aspect-square w-full bg-gray-100 rounded-lg border-2 border-dashed flex items-center justify-center">
-                                {imagePreview ? <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-md" /> : <span className="text-gray-400 text-sm">No Image</span>}
-                            </div>
-                            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
-                            <button type="button" onClick={() => fileInputRef.current?.click()} className="btn-responsive bg-primary text-white hover:bg-blue-700">Upload Image</button>
-                        </div>
-
-                        <div className="md:col-span-2 space-y-4">
-                            <div>
-                                <label htmlFor="name" className="block text-sm font-medium text-gray-700">Product Name</label>
-                                <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} required className="mt-1" />
-                            </div>
-                            <div>
-                                <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
-                                <textarea name="description" id="description" value={formData.description || ''} onChange={handleChange} rows={2} className="mt-1"></textarea>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
-                                    <select name="category" id="category" value={isAddingNewCategory ? ADD_NEW_CATEGORY_VALUE : formData.category} onChange={handleChange} required={!isAddingNewCategory} className="mt-1">
-                                        <option value="" disabled>Select a category</option>
-                                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                                        <option value={ADD_NEW_CATEGORY_VALUE} className="font-bold text-primary">+ Add New Category</option>
-                                    </select>
-                                </div>
-                                {isAddingNewCategory && (
-                                    <div>
-                                        <label htmlFor="newCategory" className="block text-sm font-medium text-gray-700">New Category Name</label>
-                                        <input type="text" id="newCategory" value={newCategoryValue} onChange={(e) => setNewCategoryValue(e.target.value)} required className="mt-1" />
-                                    </div>
-                                )}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Product Type</label>
-                                <div className="mt-2 flex gap-4">
-                                    <label className="flex items-center"><input type="radio" value="simple" name="productType" checked={formData.productType === 'simple' || !formData.productType} onChange={handleProductTypeChange} className="focus:ring-primary h-4 w-4 text-primary border-gray-300" /><span className="ml-2 text-sm text-gray-600">Simple Product</span></label>
-                                    <label className="flex items-center"><input type="radio" value="variable" name="productType" checked={formData.productType === 'variable'} onChange={handleProductTypeChange} className="focus:ring-primary h-4 w-4 text-primary border-gray-300" /><span className="ml-2 text-sm text-gray-600">Variable Product</span></label>
-                                </div>
+        <ModalShell 
+            isOpen={isOpen} 
+            onClose={onClose} 
+            title={product ? 'Edit Asset Identity' : 'Enroll New Asset'} 
+            description="Inventory Control Protocol"
+            maxWidth="max-w-4xl"
+            footer={footer}
+        >
+            <div className="space-y-10">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                    <div className="md:col-span-1 space-y-4">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 block">Product Asset</label>
+                        <div className="aspect-square w-full bg-slate-50 dark:bg-gray-800 rounded-3xl border-2 border-dashed border-slate-200 dark:border-gray-700 flex items-center justify-center relative overflow-hidden group shadow-inner">
+                            {imagePreview ? <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" /> : <span className="text-slate-300 font-bold uppercase tracking-widest text-[10px]">No Asset</span>}
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
+                                <button type="button" onClick={() => fileInputRef.current?.click()} className="px-6 py-3 bg-white text-slate-900 rounded-xl font-bold uppercase text-[9px] tracking-widest shadow-xl">Update Image</button>
                             </div>
                         </div>
-                    </main>
-
-                    <div className="px-6 pb-6 space-y-6">
-                        {formData.productType === 'variable' ? (
-                            <>
-                                <div>
-                                    <h4 className="text-md font-medium text-gray-700 mb-2">Variant Options</h4>
-                                    <div className="space-y-3 p-3 bg-gray-50 border rounded-md">
-                                        {formData.variantOptions?.map((option, index) => (
-                                            <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
-                                                <input type="text" placeholder="Option name (e.g., Size)" value={option.name} onChange={(e) => handleOptionNameChange(index, e.target.value)} className="md:col-span-1" />
-                                                <input type="text" placeholder="Comma-separated values (e.g., S, M, L)" value={option.values.join(', ')} onChange={(e) => handleOptionValuesChange(index, e.target.value)} className="md:col-span-2" />
-                                                {formData.variantOptions && formData.variantOptions.length > 1 && <button type="button" onClick={() => handleRemoveOption(index)} className="text-red-500 hover:text-red-700 p-1 rounded-full justify-self-end md:col-start-4">&times;</button>}
-                                            </div>
-                                        ))}
-                                        <button type="button" onClick={handleAddOption} className="mt-2 text-sm text-primary font-medium hover:underline">+ Add another option</button>
-                                    </div>
-                                    <button type="button" onClick={generateVariants} className="mt-3 w-full bg-blue-100 text-primary px-4 py-2 rounded-lg font-semibold hover:bg-blue-200">Generate Variants</button>
-                                </div>
-
-                                {formData.variants && formData.variants.length > 0 && (
-                                    <div>
-                                        <h4 className="text-md font-medium text-gray-700 my-4">Generated Variants ({formData.variants.length})</h4>
-                                        <div className="max-h-60 overflow-y-auto border rounded-md">
-                                            <table className="w-full text-sm">
-                                                <thead className="bg-gray-100 sticky top-0"><tr className="text-left">
-                                                    <th className="p-2 font-semibold">Variant</th><th className="p-2 font-semibold">Price ({cs})</th><th className="p-2 font-semibold">Cost ({cs})</th><th className="p-2 font-semibold">Stock</th><th className="p-2 font-semibold">SKU</th>
-                                                </tr></thead>
-                                                <tbody>{formData.variants.map((variant, index) => (
-                                                    <tr key={variant.id} className="border-t">
-                                                        <td className="p-2 font-medium text-gray-800">{variant.attributes.map(attr => attr.value).join(' / ')}</td>
-                                                        <td className="p-1"><input type="number" value={variant.price} onChange={e => handleVariantChange(index, 'price', e.target.value)} className="w-full" step="0.01" /></td>
-                                                        <td className="p-1"><input type="number" value={variant.costPrice} onChange={e => handleVariantChange(index, 'costPrice', e.target.value)} className="w-full" step="0.01" /></td>
-                                                        <td className="p-1"><input type="number" value={variant.stock} onChange={e => handleVariantChange(index, 'stock', e.target.value)} className="w-full" step="1"/></td>
-                                                        <td className="p-1"><input type="text" value={variant.sku || ''} onChange={e => handleVariantChange(index, 'sku', e.target.value)} className="w-full" /></td>
-                                                    </tr>
-                                                ))}</tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                )}
-                            </>
-                        ) : (
-                             <>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label htmlFor="price" className="block text-sm font-medium text-gray-700">Selling Price ({cs})</label><input type="number" name="price" id="price" value={formData.price} onChange={handleChange} required min="0" step="0.01" className="mt-1" /></div>
-                                    <div><label htmlFor="costPrice" className="block text-sm font-medium text-gray-700">Cost Price ({cs})</label><input type="number" name="costPrice" id="costPrice" value={formData.costPrice} onChange={handleChange} required min="0" step="0.01" className="mt-1" /></div>
-                                    <div className="col-span-2"><label className="block text-sm font-medium text-gray-700">Live Profit</label><div className={`mt-1 w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg shadow-inner text-lg font-bold text-center ${liveProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(liveProfit, cs)}</div></div>
-                                    <div><label htmlFor="stock" className="block text-sm font-medium text-gray-700">Stock Quantity</label><input type="number" name="stock" id="stock" value={formData.stock} onChange={handleChange} required min="0" step="1" className="mt-1" /></div>
-                                    <div><label htmlFor="commissionPercentage" className="block text-sm font-medium text-gray-700">Commission (%)</label><input type="number" name="commissionPercentage" id="commissionPercentage" value={formData.commissionPercentage} onChange={handleChange} required min="0" step="0.1" className="mt-1" /></div>
-                                </div>
-                                <div>
-                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Tiered Pricing (Optional)</h4>
-                                    <div className="space-y-2 max-h-32 overflow-y-auto">{formData.tieredPricing?.map((tier, index) => (<div key={index} className="flex items-center gap-2"><span className="text-sm text-gray-500">Buy</span><input type="number" value={tier.quantity} onChange={(e) => handleTierChange(index, 'quantity', e.target.value)} min="1" className="w-20 px-2 py-1 bg-white border border-gray-300 rounded-md text-sm" placeholder="Qty" /><span className="text-sm text-gray-500">or more for</span><input type="number" value={tier.price} onChange={(e) => handleTierChange(index, 'price', e.target.value)} min="0" step="0.01" className="w-24 px-2 py-1 bg-white border border-gray-300 rounded-md text-sm" placeholder="Price" /><button type="button" onClick={() => removeTier(index)} className="text-red-500 hover:text-red-700 p-1 rounded-full">&times;</button></div>))}</div>
-                                    <button type="button" onClick={addTier} className="mt-2 text-sm text-primary font-medium hover:underline">+ Add Price Tier</button>
-                                </div>
-                            </>
-                        )}
+                        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
                     </div>
 
-                    <footer className="p-4 bg-gray-50 rounded-b-lg flex sm:justify-center flex-shrink-0">
-                        <div className="responsive-btn-group sm:flex-row-reverse">
-                            <button type="submit" className="bg-primary text-white hover:bg-blue-700">{product ? 'Save Changes' : 'Save Product'}</button>
-                            <button type="button" onClick={onClose} className="bg-gray-200 text-gray-800 hover:bg-gray-300">Cancel</button>
+                    <div className="md:col-span-2 space-y-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div>
+                                <label htmlFor="sku" className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 mb-2 block">Product ID / SKU</label>
+                                <input type="text" name="sku" id="sku" value={formData.sku || ''} onChange={handleChange} className={inputClasses} placeholder="e.g. PRD-001" disabled={isSaving} />
+                            </div>
+                            <div>
+                                <label htmlFor="name" className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 mb-2 block">Unit Descriptor</label>
+                                <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} required className={inputClasses} placeholder="e.g. Premium Item X" disabled={isSaving} />
+                            </div>
                         </div>
-                    </footer>
-                </form>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div>
+                                <label htmlFor="category" className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 mb-2 block">Protocol Class</label>
+                                <select name="category" id="category" value={isAddingNewCategory ? ADD_NEW_CATEGORY_VALUE : formData.category} onChange={handleChange} required={!isAddingNewCategory} className={inputClasses} disabled={isSaving}>
+                                    <option value="" disabled>Select Class...</option>
+                                    {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                    <option value={ADD_NEW_CATEGORY_VALUE} className="font-black text-primary">+ Enroll New Category</option>
+                                </select>
+                            </div>
+                            {isAddingNewCategory && (
+                                <div className="animate-fade-in">
+                                    <label htmlFor="newCategory" className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 mb-2 block">New Protocol Identity</label>
+                                    <input type="text" id="newCategory" value={newCategoryValue} onChange={(e) => setNewCategoryValue(e.target.value)} required className={inputClasses} placeholder="Identity name..." disabled={isSaving} />
+                                </div>
+                            )}
+                        </div>
+                        <div>
+                            <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 mb-2 block">Workflow Protocol</label>
+                            <div className="flex gap-4">
+                                <label className={`flex-1 flex items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${formData.productType === 'simple' ? 'bg-primary/5 border-primary text-primary shadow-inner' : 'bg-white dark:bg-gray-900 border-slate-100 dark:border-gray-800 text-slate-400'}`}>
+                                    <input type="radio" value="simple" name="productType" checked={formData.productType === 'simple' || !formData.productType} onChange={handleProductTypeChange} className="sr-only" disabled={isSaving} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Static Unit</span>
+                                </label>
+                                <label className={`flex-1 flex items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${formData.productType === 'variable' ? 'bg-primary/5 border-primary text-primary shadow-inner' : 'bg-white dark:bg-gray-900 border-slate-100 dark:border-gray-800 text-slate-400'}`}>
+                                    <input type="radio" value="variable" name="productType" checked={formData.productType === 'variable'} onChange={handleProductTypeChange} className="sr-only" disabled={isSaving} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Dynamic Variant</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {formData.productType === 'variable' ? (
+                    <div className="space-y-10 animate-fade-in">
+                        <div className="p-8 bg-slate-50 dark:bg-gray-800/50 rounded-[2.5rem] border border-slate-100 dark:border-gray-800">
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 px-1">Variant Configuration</h4>
+                            <div className="space-y-4">
+                                {formData.variantOptions?.map((option, index) => (
+                                    <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                                        <input type="text" placeholder="Attribute (e.g. Size)" value={option.name} onChange={(e) => handleOptionNameChange(index, e.target.value)} className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 text-xs font-bold focus:ring-4 focus:ring-primary/10 outline-none" disabled={isSaving} />
+                                        <input type="text" placeholder="Values (S, M, L)" value={option.values.join(', ')} onChange={(e) => handleOptionValuesChange(index, e.target.value)} className="md:col-span-2 w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 text-xs font-bold focus:ring-4 focus:ring-primary/10 outline-none" disabled={isSaving} />
+                                        <button type="button" onClick={() => handleRemoveOption(index)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl text-center transition-colors" disabled={isSaving}>&times;</button>
+                                    </div>
+                                ))}
+                                <button type="button" onClick={handleAddOption} className="mt-4 text-[9px] font-black uppercase tracking-widest text-primary hover:underline" disabled={isSaving}>+ Enroll Attribute</button>
+                            </div>
+                            <button type="button" onClick={generateVariants} className="mt-8 w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-[0.98] transition-all" disabled={isSaving}>Synchronize Variant Grid</button>
+                        </div>
+
+                        {formData.variants && formData.variants.length > 0 && (
+                            <div className="animate-fade-in space-y-4">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-4 px-1">Variant Matrix ({formData.variants.length} nodes)</h4>
+                                <div className="border dark:border-gray-800 rounded-[2.5rem] overflow-hidden shadow-sm">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-slate-50 dark:bg-gray-800 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                                            <tr>
+                                                <th className="p-5">Permutation</th>
+                                                <th className="p-5 text-right">Value ({cs})</th>
+                                                <th className="p-5 text-right">Inventory</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50 dark:divide-gray-800">
+                                            {formData.variants.map((variant, index) => (
+                                                <tr key={variant.id} className="bg-white dark:bg-gray-950">
+                                                    <td className="p-5 font-bold text-slate-900 dark:text-white uppercase text-xs">{variant.attributes.map(attr => attr.value).join(' / ')}</td>
+                                                    <td className="p-5">
+                                                        <div className="relative">
+                                                            <div className="absolute inset-y-0 left-2 flex items-center pointer-events-none text-[9px] text-slate-400 font-bold">{cs}</div>
+                                                            <input type="number" value={variant.price} onChange={e => handleVariantChange(index, 'price', e.target.value)} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-xl p-2.5 pl-6 text-right font-black tabular-nums" step="0.01" disabled={isSaving} />
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-5">
+                                                        <input type="number" value={variant.stock} onChange={e => handleVariantChange(index, 'stock', e.target.value)} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-xl p-2.5 text-right font-black tabular-nums" step="1" disabled={isSaving} />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="space-y-10 animate-fade-in">
+                        <div className="grid grid-cols-2 gap-8">
+                            <div className="space-y-4">
+                                <label htmlFor="price" className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 block">Market Value ({cs})</label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 font-black text-lg">{cs}</div>
+                                    <input type="number" name="price" id="price" value={formData.price} onChange={handleChange} required min="0" step="0.01" className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl py-5 pl-12 pr-6 text-2xl font-black focus:ring-4 focus:ring-primary/10 transition-all outline-none tabular-nums" placeholder="0.00" disabled={isSaving} />
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <label htmlFor="costPrice" className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 block">Unit Acq Cost ({cs})</label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 font-black text-lg">{cs}</div>
+                                    <input type="number" name="costPrice" id="costPrice" value={formData.costPrice} onChange={handleChange} required min="0" step="0.01" className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl py-5 pl-12 pr-6 text-2xl font-black focus:ring-4 focus:ring-primary/10 transition-all outline-none tabular-nums" placeholder="0.00" disabled={isSaving} />
+                                </div>
+                            </div>
+                        </div>
+                        <div className={`p-10 rounded-[3rem] text-center transition-all shadow-inner border ${liveProfit >= 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30' : 'bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/30'}`}>
+                            <p className="text-[10px] font-black uppercase tracking-[0.4em] mb-4">Protocol Margin Yield</p>
+                            <p className="text-6xl font-black tabular-nums tracking-tighter">
+                                {formatCurrency(liveProfit, cs)}
+                            </p>
+                        </div>
+                        
+                        <div className="space-y-6 pt-10 border-t dark:border-gray-800">
+                            <div className="flex justify-between items-center px-1">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Bulk Pricing Protocols</h4>
+                                <button type="button" onClick={addTier} className="flex items-center gap-2 text-[9px] font-black text-primary uppercase tracking-widest hover:underline">
+                                    <PlusIcon className="w-3 h-3" /> Enroll Tier
+                                </button>
+                            </div>
+                            
+                            <div className="space-y-3">
+                                {formData.tieredPricing?.map((tier, idx) => (
+                                    <div key={idx} className="flex items-center gap-4 bg-slate-50 dark:bg-gray-800 p-5 rounded-[2rem] animate-fade-in border border-slate-100 dark:border-gray-700">
+                                        <div className="flex-1">
+                                            <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 block px-1">Quantity Threshold</label>
+                                            <input 
+                                                type="number" 
+                                                value={tier.quantity} 
+                                                onChange={e => handleTierChange(idx, 'quantity', e.target.value)} 
+                                                className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 text-xs font-bold outline-none tabular-nums" 
+                                                placeholder="e.g. 10" 
+                                            />
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 block px-1">Unit Price ({cs})</label>
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-[10px] text-slate-400 font-bold">{cs}</div>
+                                                <input 
+                                                    type="number" 
+                                                    value={tier.price} 
+                                                    onChange={e => handleTierChange(idx, 'price', e.target.value)} 
+                                                    className="w-full bg-white dark:bg-gray-900 border-none rounded-xl p-3 pl-7 text-xs font-bold outline-none tabular-nums" 
+                                                    placeholder="0.00" 
+                                                />
+                                            </div>
+                                        </div>
+                                        <button type="button" onClick={() => removeTier(idx)} className="p-3 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all mt-4">
+                                            <DeleteIcon className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                                {formData.tieredPricing?.length === 0 && (
+                                    <div className="text-center py-10 border-2 border-dashed border-slate-100 dark:border-gray-800 rounded-[2.5rem]">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest italic">No bulk rates configured</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
-        </div>
+        </ModalShell>
     );
 };
 

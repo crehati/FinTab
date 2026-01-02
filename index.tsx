@@ -1,3 +1,4 @@
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
@@ -8,7 +9,13 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-const root = ReactDOM.createRoot(rootElement);
+// Global root registry to prevent Error #310 in dynamic module environments
+const rootContainer = rootElement as any;
+if (!rootContainer._reactRoot) {
+    rootContainer._reactRoot = ReactDOM.createRoot(rootElement);
+}
+const root = rootContainer._reactRoot;
+
 root.render(
   <React.StrictMode>
     <ErrorBoundary>

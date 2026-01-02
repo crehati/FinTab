@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import type { User, ReceiptSettingsData, CustomPayment } from '../types';
 import { PlusIcon } from '../constants';
@@ -22,8 +23,11 @@ const StaffPaymentManager: React.FC<StaffPaymentManagerProps> = ({ users, receip
         ).sort((a, b) => new Date(b.dateInitiated).getTime() - new Date(a.dateInitiated).getTime());
     }, [users]);
 
-    const awaitingPayout = useMemo(() => allPayments.filter(p => p.status === 'approved_by_user'), [allPayments]);
-    const history = useMemo(() => allPayments.filter(p => p.status !== 'pending_user_approval' && p.status !== 'approved_by_user'), [allPayments]);
+    // Fix: Filter using correct status 'approved_by_owner' instead of the undeclared 'approved'.
+    const awaitingPayout = useMemo(() => allPayments.filter(p => p.status === 'approved_by_owner'), [allPayments]);
+    
+    // Fix: Update history filter to use precise status codes 'pending_owner_approval' and 'approved_by_owner'.
+    const history = useMemo(() => allPayments.filter(p => p.status !== 'pending_owner_approval' && p.status !== 'approved_by_owner'), [allPayments]);
 
     const handleDraftConfirm = (targetUserId: string, amount: number, description: string) => {
         handleInitiateCustomPayment(targetUserId, amount, description);
@@ -31,19 +35,21 @@ const StaffPaymentManager: React.FC<StaffPaymentManagerProps> = ({ users, receip
     };
 
     const getStatusBadge = (status: CustomPayment['status']) => {
+        // Fix: Update styles mapping keys to match actual CustomPayment status values.
         const styles: Record<CustomPayment['status'], string> = {
-            pending_user_approval: 'bg-yellow-100 text-yellow-800',
-            rejected_by_user: 'bg-red-100 text-red-800',
-            approved_by_user: 'bg-blue-100 text-blue-800',
-            paid: 'bg-purple-100 text-purple-800',
+            pending_owner_approval: 'bg-yellow-100 text-yellow-800',
+            rejected_by_owner: 'bg-red-100 text-red-800',
+            approved_by_owner: 'bg-blue-100 text-blue-800',
             completed: 'bg-green-100 text-green-800',
+            cancelled_by_user: 'bg-gray-100 text-gray-800',
         };
+        // Fix: Update text mapping keys to match actual CustomPayment status values.
         const text: Record<CustomPayment['status'], string> = {
-            pending_user_approval: 'Pending User Approval',
-            rejected_by_user: 'Rejected by User',
-            approved_by_user: 'Approved by User',
-            paid: 'Paid',
+            pending_owner_approval: 'Pending Owner Approval',
+            rejected_by_owner: 'Rejected by Owner',
+            approved_by_owner: 'Approved by Owner',
             completed: 'Completed',
+            cancelled_by_user: 'Cancelled by User',
         };
         return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${styles[status]}`}>{text[status]}</span>;
     };
@@ -95,8 +101,9 @@ const StaffPaymentManager: React.FC<StaffPaymentManagerProps> = ({ users, receip
                                 <td className="px-6 py-4 font-semibold">{cs}{payment.amount.toFixed(2)}</td>
                                 <td className="px-6 py-4">{payment.description}</td>
                                 <td className="px-6 py-4 text-center">
-                                    {payment.status === 'approved_by_user' ? (
-                                        <button onClick={() => handleUpdateCustomPaymentStatus(payment.user.id, payment.id, 'paid')} className="px-3 py-1 text-xs font-semibold text-white bg-primary rounded-md hover:bg-blue-700">
+                                    {/* Fix: Use the correct 'approved_by_owner' status check and trigger 'completed' as the target status. */}
+                                    {payment.status === 'approved_by_owner' ? (
+                                        <button onClick={() => handleUpdateCustomPaymentStatus(payment.user.id, payment.id, 'completed')} className="px-3 py-1 text-xs font-semibold text-white bg-primary rounded-md hover:bg-blue-700">
                                             Mark as Paid
                                         </button>
                                     ) : (

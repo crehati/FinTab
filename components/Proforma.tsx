@@ -1,7 +1,11 @@
+
 import React, { useState, useMemo } from 'react';
 import type { Sale, ReceiptSettingsData, User, Customer, PrinterSettingsData } from '../types';
 import ReceiptModal from './ReceiptModal';
+import EmptyState from './EmptyState';
 import { formatCurrency } from '../lib/utils';
+import { ProformaIcon, CloseIcon } from '../constants';
+import { useNavigate } from 'react-router-dom';
 
 interface ProformaProps {
     sales: Sale[];
@@ -19,6 +23,46 @@ const Proforma: React.FC<ProformaProps> = ({ sales, customers, users, t, receipt
     const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [activePreset, setActivePreset] = useState<string>('all');
+    const navigate = useNavigate();
+
+    const applyPreset = (preset: string) => {
+        setActivePreset(preset);
+        const now = new Date();
+        let start = '';
+        let end = '';
+
+        const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+        switch (preset) {
+            case 'today':
+                start = formatDate(now);
+                end = formatDate(now);
+                break;
+            case 'yesterday':
+                const yesterday = new Date(now);
+                yesterday.setDate(now.getDate() - 1);
+                start = formatDate(yesterday);
+                end = formatDate(yesterday);
+                break;
+            case 'week':
+                const lastWeek = new Date(now);
+                lastWeek.setDate(now.getDate() - 7);
+                start = formatDate(lastWeek);
+                end = formatDate(now);
+                break;
+            case 'month':
+                const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+                start = formatDate(firstDay);
+                end = formatDate(now);
+                break;
+            default:
+                start = '';
+                end = '';
+        }
+        setStartDate(start);
+        setEndDate(end);
+    };
 
     const filteredAndSortedSales = useMemo(() => {
         let filteredSales = sales.filter(sale => sale.status === 'proforma');
@@ -37,74 +81,77 @@ const Proforma: React.FC<ProformaProps> = ({ sales, customers, users, t, receipt
     }, [sales, startDate, endDate]);
 
     const renderDesktopTable = () => (
-        <table className="hidden md:table w-full text-sm text-left text-gray-500">
-            <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                <tr>
-                    <th scope="col" className="px-6 py-3">Proforma #</th>
-                    <th scope="col" className="px-6 py-3">Date</th>
-                    <th scope="col" className="px-6 py-3">Customer</th>
-                    <th scope="col" className="px-6 py-3">Staff</th>
-                    <th scope="col" className="px-6 py-3">Total</th>
-                    <th scope="col" className="px-6 py-3">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {filteredAndSortedSales.map(sale => {
-                    const customer = customers.find(c => c.id === sale.customerId);
-                    const user = users.find(u => u.id === sale.userId);
-                    return (
-                        <tr key={sale.id} className="bg-white border-b hover:bg-gray-50">
-                            <td className="px-6 py-4">
-                                <button
-                                    onClick={() => setSelectedSale(sale)}
-                                    className="font-mono text-xs font-semibold text-primary hover:underline"
-                                    aria-label={`View proforma ${sale.id.slice(-6).toUpperCase()}`}
-                                >
-                                    {sale.id.slice(-6).toUpperCase()}
-                                </button>
-                            </td>
-                            <td className="px-6 py-4 text-gray-800">{new Date(sale.date).toLocaleString()}</td>
-                            <td className="px-6 py-4 text-gray-800">{customer?.name || 'N/A'}</td>
-                            <td className="px-6 py-4 text-gray-800">{user?.name || 'N/A'}</td>
-                            <td className="px-6 py-4 font-semibold text-gray-800">{formatCurrency(sale.total, receiptSettings.currencySymbol)}</td>
-                            <td className="px-6 py-4">
-                                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                    Proforma
-                                </span>
-                            </td>
+        <div className="table-wrapper hidden md:block">
+            <div className="table-container max-h-[600px]">
+                <table className="w-full">
+                    <thead>
+                        <tr>
+                            <th scope="col">PROFORMA #</th>
+                            <th scope="col">Issuance Timestamp</th>
+                            <th scope="col">Potential Client</th>
+                            <th scope="col">Auth Agent</th>
+                            <th scope="col" className="text-right">Estimated Value</th>
+                            <th scope="col" className="text-center">Protocol Status</th>
                         </tr>
-                    )
-                })}
-            </tbody>
-        </table>
+                    </thead>
+                    <tbody className="divide-y">
+                        {filteredAndSortedSales.map(sale => {
+                            const customer = customers.find(c => c.id === sale.customerId);
+                            const user = users.find(u => u.id === sale.userId);
+                            return (
+                                <tr key={sale.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                    <td className="font-bold">
+                                        <button
+                                            onClick={() => setSelectedSale(sale)}
+                                            className="text-[11px] font-black text-primary hover:underline uppercase tracking-tight"
+                                            aria-label={`View proforma ${sale.id.slice(-6).toUpperCase()}`}
+                                        >
+                                            {sale.id.slice(-6).toUpperCase()}
+                                        </button>
+                                    </td>
+                                    <td className="text-slate-500 dark:text-slate-400 tabular-nums text-xs">
+                                        {new Date(sale.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                    </td>
+                                    <td className="text-slate-800 dark:text-slate-200 font-bold uppercase text-xs">{customer?.name || 'Anonymous Inquiry'}</td>
+                                    <td className="text-slate-600 dark:text-slate-400 font-medium uppercase text-[10px]">{user?.name || 'System'}</td>
+                                    <td className="table-num text-slate-900 dark:text-white font-black">
+                                        {formatCurrency(sale.total, receiptSettings.currencySymbol)}
+                                    </td>
+                                    <td className="text-center">
+                                        <span className="status-badge status-draft">Quote Only</span>
+                                    </td>
+                                </tr>
+                            )
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     );
 
     const renderMobileCards = () => (
-        <div className="md:hidden space-y-3">
+        <div className="md:hidden space-y-4">
             {filteredAndSortedSales.map(sale => {
-                 const customer = customers.find(c => c.id === sale.customerId);
-                 return (
-                    <div key={sale.id} className="bg-white border border-gray-100 p-4 rounded-xl shadow-lg">
+                const customer = customers.find(c => c.id === sale.customerId);
+                return (
+                    <div key={sale.id} className="bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-800 p-6 rounded-[2.5rem] shadow-sm">
                         <div className="flex justify-between items-start">
-                            <div className="flex-grow">
+                            <div className="flex-grow min-w-0">
                                 <button
                                     onClick={() => setSelectedSale(sale)}
-                                    className="font-mono text-sm font-semibold text-primary hover:underline text-left"
-                                    aria-label={`View proforma ${sale.id.slice(-6).toUpperCase()}`}
+                                    className="text-[10px] font-black text-primary hover:underline text-left block uppercase tracking-widest"
                                 >
-                                    #{sale.id.slice(-6).toUpperCase()}
+                                    QUOTE #{sale.id.slice(-6).toUpperCase()}
                                 </button>
-                                <p className="text-gray-800 font-medium mt-1">{customer?.name || 'N/A'}</p>
-                                <p className="text-xs text-gray-500 mt-2">
-                                    {sale.items.length} {sale.items.length === 1 ? 'item' : 'items'} &bull; {new Date(sale.date).toLocaleString()}
+                                <p className="text-slate-900 dark:text-white font-bold mt-2 truncate uppercase tracking-tighter">{customer?.name || 'Anonymous Client'}</p>
+                                <p className="text-[10px] text-slate-400 font-semibold mt-3 uppercase tracking-widest tabular-nums">
+                                    {sale.items.length} units &bull; {new Date(sale.date).toLocaleDateString()}
                                 </p>
                             </div>
                             <div className="text-right flex-shrink-0 ml-4">
-                                <p className="font-bold text-lg text-gray-800">{formatCurrency(sale.total, receiptSettings.currencySymbol)}</p>
-                                <div className="mt-1">
-                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                        Proforma
-                                    </span>
+                                <p className="font-black text-xl text-slate-900 dark:text-white tabular-nums">{formatCurrency(sale.total, receiptSettings.currencySymbol)}</p>
+                                <div className="mt-2">
+                                    <span className="status-badge status-draft !text-[8px]">PROFORMA</span>
                                 </div>
                             </div>
                         </div>
@@ -115,51 +162,104 @@ const Proforma: React.FC<ProformaProps> = ({ sales, customers, users, t, receipt
     );
 
     return (
-        <>
-            <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-4">
-                    <h2 className="text-xl font-bold text-gray-700 shrink-0">{t('proforma.title')}</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full md:w-auto">
-                        <div>
-                            <label htmlFor="start-date" className="block text-sm font-medium text-gray-600">From</label>
-                            <input
-                                type="date"
-                                id="start-date"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:ring-primary focus:border-primary"
-                                aria-label="Start date for filtering proformas"
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="end-date" className="block text-sm font-medium text-gray-600">To</label>
-                            <input
-                                type="date"
-                                id="end-date"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm focus:ring-primary focus:border-primary"
-                                aria-label="End date for filtering proformas"
-                            />
+        <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-xl p-8 border border-white/10">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-10 gap-6">
+                    <div>
+                        <h2 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tighter leading-none">Proforma</h2>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-4">Pre-Authorization Estimates & Quotes</p>
+                    </div>
+                    
+                    <div className="w-full md:w-auto bg-slate-50 dark:bg-gray-800 p-4 rounded-[2rem] border border-slate-100 dark:border-gray-700 shadow-inner">
+                        <div className="flex flex-col gap-4">
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { id: 'all', label: 'All Quotes' },
+                                    { id: 'today', label: 'Today' },
+                                    { id: 'yesterday', label: 'Yesterday' },
+                                    { id: 'week', label: 'Last 7D' },
+                                    { id: 'month', label: 'Month' }
+                                ].map(preset => (
+                                    <button
+                                        key={preset.id}
+                                        onClick={() => applyPreset(preset.id)}
+                                        className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+                                            activePreset === preset.id 
+                                            ? 'bg-primary text-white shadow-lg shadow-primary/20' 
+                                            : 'bg-white dark:bg-gray-900 text-slate-400 hover:text-slate-600 dark:hover:text-white border border-slate-100 dark:border-gray-700'
+                                        }`}
+                                    >
+                                        {preset.label}
+                                    </button>
+                                ))}
+                            </div>
+                            
+                            <div className="flex items-center gap-3">
+                                <div className="relative flex-1">
+                                    <input
+                                        type="date"
+                                        value={startDate}
+                                        onChange={(e) => { setStartDate(e.target.value); setActivePreset('custom'); }}
+                                        className="w-full text-xs bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-700 rounded-xl px-3 py-2.5 font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                        aria-label="Start date"
+                                    />
+                                </div>
+                                <span className="text-slate-300 font-bold">→</span>
+                                <div className="relative flex-1">
+                                    <input
+                                        type="date"
+                                        value={endDate}
+                                        onChange={(e) => { setEndDate(e.target.value); setActivePreset('custom'); }}
+                                        className="w-full text-xs bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-700 rounded-xl px-3 py-2.5 font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                        aria-label="End date"
+                                    />
+                                </div>
+                                {(startDate || endDate) && (
+                                    <button 
+                                        onClick={() => applyPreset('all')}
+                                        className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
+                                        title="Clear Filter"
+                                    >
+                                        <CloseIcon className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="min-h-[500px]">
                     {filteredAndSortedSales.length > 0 ? (
                         <>
                             {renderDesktopTable()}
                             {renderMobileCards()}
                         </>
                     ) : (
-                        <div className="text-center py-10">
-                            <p className="text-gray-500">No proforma invoices found for the selected date range.</p>
-                        </div>
+                        <EmptyState 
+                            icon={<ProformaIcon />} 
+                            title={startDate || endDate ? "Zero quotes in interval" : "No proforma records"} 
+                            description={startDate || endDate ? "Adjust your audit horizon to find matching estimations." : "Create proforma invoices for clients in the counter to track inquiries."}
+                            action={{ label: "Go to Counter", onClick: () => navigate('/counter') }}
+                        />
                     )}
                 </div>
             </div>
-            {selectedSale && <ReceiptModal sale={selectedSale} customers={customers} users={users} onClose={() => setSelectedSale(null)} receiptSettings={receiptSettings} onDelete={onDeleteSale} currentUser={currentUser} t={t} isTrialExpired={isTrialExpired} printerSettings={printerSettings} />}
-        </>
+            
+            {selectedSale && (
+                <ReceiptModal 
+                    sale={selectedSale} 
+                    customers={customers} 
+                    users={users} 
+                    onClose={() => setSelectedSale(null)} 
+                    receiptSettings={receiptSettings} 
+                    onDelete={onDeleteSale} 
+                    currentUser={currentUser} 
+                    t={t} 
+                    isTrialExpired={isTrialExpired} 
+                    printerSettings={printerSettings} 
+                />
+            )}
+        </div>
     );
 };
 

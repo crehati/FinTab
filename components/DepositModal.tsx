@@ -1,22 +1,28 @@
+
 import React, { useState, useEffect } from 'react';
+import ModalShell from './ModalShell';
+import type { BankAccount } from '../types';
 
 interface DepositModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onRequestDeposit: (amount: number, description: string) => void;
+    onRequestDeposit: (amount: number, description: string, bankAccountId?: string) => void;
     maxAmount: number;
     currencySymbol: string;
+    bankAccounts: BankAccount[];
 }
 
-const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onRequestDeposit, maxAmount, currencySymbol }) => {
+const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onRequestDeposit, maxAmount, currencySymbol, bankAccounts = [] }) => {
     const [amount, setAmount] = useState('');
     const [description, setDescription] = useState('');
+    const [selectedBankId, setSelectedBankId] = useState('');
     const [error, setError] = useState('');
 
     useEffect(() => {
         if (isOpen) {
             setAmount('');
             setDescription('');
+            setSelectedBankId('');
             setError('');
         }
     }, [isOpen]);
@@ -44,69 +50,87 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onRequestD
             return;
         }
 
-        onRequestDeposit(numericAmount, description.trim());
+        onRequestDeposit(numericAmount, description.trim(), selectedBankId || undefined);
         onClose();
     };
 
-    if (!isOpen) return null;
+    const footer = (
+        <>
+            <button onClick={handleSubmit} className="btn-base btn-primary flex-1 py-4">
+                Confirm Request
+            </button>
+            <button onClick={onClose} className="btn-base btn-secondary px-8 py-4">
+                Abort
+            </button>
+        </>
+    );
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-            <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-2xl w-full max-w-md">
-                <header className="p-6 border-b">
-                    <h2 className="text-2xl font-bold text-gray-800">Request Cash Deposit</h2>
-                </header>
-                <main className="p-6 space-y-4">
-                    <div>
-                        <p className="text-sm text-gray-600">Available Cash on Hand: <span className="font-bold text-primary">{currencySymbol}{maxAmount.toFixed(2)}</span></p>
-                    </div>
-                    <div>
-                        <label htmlFor="deposit-amount" className="block text-sm font-medium text-gray-700">Deposit Amount</label>
-                        <div className="mt-1 relative rounded-md shadow-sm">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <span className="text-gray-500 sm:text-lg">{currencySymbol}</span>
-                            </div>
-                            <input
-                                type="number"
-                                id="deposit-amount"
-                                value={amount}
-                                onChange={handleAmountChange}
-                                className="focus:ring-primary focus:border-primary block w-full pl-8 pr-4 sm:text-lg border-gray-300 rounded-md py-2 text-center font-semibold"
-                                placeholder="0.00"
-                                step="0.01"
-                                min="0.01"
-                                max={maxAmount.toFixed(2)}
-                                autoFocus
-                                required
-                            />
-                        </div>
-                    </div>
-                     <div>
-                        <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
-                        <textarea
-                            id="description"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            rows={3}
-                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                            placeholder="e.g., Deposit for morning sales"
-                            required
+        <ModalShell
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Request Deposit"
+            description="Transfer liquid funds to central treasury or bank"
+            maxWidth="max-w-md"
+            footer={footer}
+        >
+            <div className="space-y-6">
+                <div className="p-6 bg-slate-50 dark:bg-gray-900 rounded-[2rem] border dark:border-gray-800 text-center shadow-inner">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Available Cash on Hand</p>
+                    <p className="text-3xl font-black text-primary tabular-nums">{currencySymbol}{maxAmount.toFixed(2)}</p>
+                </div>
+
+                <div>
+                    <label htmlFor="deposit-amount" className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Deposit Amount ({currencySymbol})</label>
+                    <div className="relative">
+                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 font-black text-xl">{currencySymbol}</div>
+                        <input
+                            type="number"
+                            id="deposit-amount"
+                            value={amount}
+                            onChange={handleAmountChange}
+                            className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl py-6 pl-12 pr-6 text-3xl font-black text-slate-900 dark:text-white tabular-nums focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+                            placeholder="0.00"
+                            step="0.01"
+                            autoFocus
                         />
                     </div>
-                    {error && <p className="text-sm text-red-600">{error}</p>}
-                </main>
-                <footer className="p-4 bg-gray-50 rounded-b-lg flex sm:justify-center">
-                    <div className="responsive-btn-group sm:flex-row-reverse">
-                        <button type="submit" className="bg-primary text-white hover:bg-blue-700">
-                            Send Request
-                        </button>
-                        <button type="button" onClick={onClose} className="bg-gray-200 text-gray-800 hover:bg-gray-300">
-                            Cancel
-                        </button>
+                </div>
+
+                <div>
+                    <label htmlFor="bank-account" className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Target Bank Account (Optional)</label>
+                    <select
+                        id="bank-account"
+                        value={selectedBankId}
+                        onChange={(e) => setSelectedBankId(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+                    >
+                        <option value="">No Bank (Physical Treasury Only)</option>
+                        {bankAccounts.map(b => (
+                            <option key={b.id} value={b.id}>{b.bankName} - {b.accountName}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div>
+                    <label htmlFor="description" className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Audit Note</label>
+                    <textarea
+                        id="description"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        rows={3}
+                        className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+                        placeholder="e.g. End of shift deposit"
+                    />
+                </div>
+
+                {error && (
+                    <div className="p-4 bg-rose-50 text-rose-600 text-[10px] font-bold uppercase tracking-widest rounded-xl border border-rose-100 animate-shake text-center">
+                        {error}
                     </div>
-                </footer>
-            </form>
-        </div>
+                )}
+            </div>
+        </ModalShell>
     );
 };
 

@@ -1,7 +1,28 @@
+
 export interface Syncable {
   syncStatus?: 'pending' | 'synced';
   lastUpdated?: string;
   isDeleted?: boolean;
+}
+
+export interface BankAccount extends Syncable {
+    id: string;
+    bankName: string;
+    accountName: string;
+    accountNumber?: string;
+    balance: number;
+    status: 'Active' | 'Inactive';
+}
+
+export interface BankTransaction extends Syncable {
+    id: string;
+    date: string;
+    bankAccountId: string;
+    type: 'deposit' | 'withdrawal' | 'transfer_in' | 'transfer_out' | 'sale_credit';
+    amount: number;
+    description: string;
+    referenceId?: string; // Sale ID or Transfer ID
+    userId: string;
 }
 
 export interface StockAdjustment {
@@ -13,19 +34,89 @@ export interface StockAdjustment {
   newStockLevel: number;
 }
 
+export interface WorkflowRoleAssignment {
+  userId: string;
+  assignedBy: string;
+  assignedAt: string;
+}
+
+export type WorkflowRoleKey = 
+  | 'cashCounter' | 'cashVerifier' | 'cashApprover'
+  | 'receivingClerk' | 'receivingVerifier' | 'receivingApprover'
+  | 'costingManager' | 'costingApprover'
+  | 'stockManager' | 'stockVerifier' | 'stockApprover';
+
+export type WorkflowRoles = Record<WorkflowRoleKey, WorkflowRoleAssignment[]>;
+
+export interface AnomalySettings {
+  cashDiffThreshold: number;
+  cashDiffPercentage: number;
+  receivingMismatchThreshold: number;
+  marginMin: number;
+  marginMax: number;
+  costChangeThreshold: number;
+  expectedSubmissionHourEnd: number;
+  weeklyCheckCount: number;
+}
+
+export interface AnomalyAlert extends Syncable {
+  id: string;
+  type: 'cash' | 'costing' | 'receiving' | 'inventory_audit';
+  severity: 'info' | 'warning' | 'error';
+  title: string;
+  message: string;
+  recommendation: string;
+  recordId: string;
+  timestamp: string;
+  isDismissed: boolean;
+  isRead?: boolean;
+  dismissalReason?: string;
+}
+
+export interface InventoryCheckItem {
+  productId: string;
+  productName: string;
+  productNumber: string;
+  systemQty: number;
+  physicalQty: number | null;
+  difference: number;
+  notes: string;
+}
+
+export type InventoryCheckStatus = 'draft' | 'checked' | 'verified' | 'accepted' | 'flagged';
+
+export interface WeeklyInventoryCheck extends Syncable {
+  id: string;
+  date: string;
+  items: InventoryCheckItem[];
+  status: InventoryCheckStatus;
+  signatures: {
+    manager?: CashCountSignature;
+    verifier?: CashCountSignature;
+    approver?: CashCountSignature;
+  };
+  auditLog: AuditEntry[];
+}
+
 export type BusinessSettingsData = Syncable & {
   paymentMethods: string[];
   defaultTaxRate: number;
   rounding: {
     enabled: boolean;
-    toNearest: number; // e.g., 0.05 for nearest 5 cents, 1 for nearest dollar
+    toNearest: number;
   };
   delivery: {
     enabled: boolean;
     fee: number;
   };
-  investorProfitWithdrawalRate: number; // Percentage (e.g., 10 for 10%)
+  investorProfitWithdrawalRate: number;
+  investorDistributionPercentage: number;
+  includeOwnerInProfitSharing: boolean;
   acceptRemoteOrders?: boolean;
+  workflowRoles?: WorkflowRoles;
+  allowMultipleAssigneesPerWorkflowRole?: boolean;
+  enforceUniqueSigners?: boolean;
+  anomalies?: AnomalySettings;
 }
 
 export type BusinessProfile = Syncable & {
@@ -41,17 +132,6 @@ export type BusinessProfile = Syncable & {
     isPublic?: boolean;
 }
 
-export interface LicensingInfo {
-  licenseType: 'Trial' | 'Free' | 'Premium';
-  enrollmentDate: string;
-  trialEndDate: string;
-}
-
-export interface VariantOption {
-  name: string;
-  values: string[];
-}
-
 export interface ProductVariant {
   id: string;
   attributes: { name: string; value: string }[];
@@ -63,6 +143,7 @@ export interface ProductVariant {
 
 export type Product = Syncable & {
   id: string;
+  sku?: string;
   name: string;
   description?: string;
   category: string;
@@ -74,7 +155,7 @@ export type Product = Syncable & {
   tieredPricing?: Array<{ quantity: number; price: number; }>;
   stockHistory?: StockAdjustment[];
   productType?: 'simple' | 'variable';
-  variantOptions?: VariantOption[];
+  variantOptions?: Array<{ name: string; values: string[] }>;
   variants?: ProductVariant[];
 }
 
@@ -87,18 +168,24 @@ export type Customer = Syncable & {
   purchaseHistory: Sale[];
 }
 
-export interface AttendanceRecord {
-  clockIn: string;
-  clockOut: string | null;
+export interface AuditEntry {
+    timestamp: string;
+    status: string;
+    actorId: string;
+    actorName: string;
+    note?: string;
+    changes?: any;
 }
 
 export interface Withdrawal {
     id: string;
     date: string;
     amount: number;
-    status: 'pending' | 'approved' | 'rejected' | 'paid' | 'completed';
-    source: 'commission' | 'investment';
+    status: 'pending' | 'approved_by_owner' | 'rejected' | 'completed' | 'cancelled_by_user';
+    source: 'commission' | 'investment' | 'compensation';
     notes?: string;
+    auditLog: AuditEntry[];
+    approvalReference?: string;
 }
 
 export interface CustomPayment {
@@ -106,9 +193,11 @@ export interface CustomPayment {
     dateInitiated: string;
     amount: number;
     description: string;
-    status: 'pending_user_approval' | 'rejected_by_user' | 'approved_by_user' | 'paid' | 'completed';
-    initiatedBy: string; // userId of owner/manager
+    status: 'pending_owner_approval' | 'rejected_by_owner' | 'approved_by_owner' | 'completed' | 'cancelled_by_user';
+    initiatedBy: string;
     notes?: string;
+    auditLog: AuditEntry[];
+    approvalReference?: string;
 }
 
 export type Deposit = Syncable & {
@@ -118,30 +207,37 @@ export type Deposit = Syncable & {
     description: string;
     userId: string;
     status: 'pending' | 'approved' | 'rejected';
+    bankAccountId?: string;
 }
 
-export type Role = 'Owner' | 'Manager' | 'Cashier' | 'Investor' | 'SellerAgent' | 'Super Admin' | 'Custom';
+export type Role = 'Owner' | 'Admin' | 'Manager' | 'Staff' | 'Investor' | 'Custom' | 'Cashier' | 'SellerAgent' | 'BankVerifier' | 'Super Admin';
+
+export interface AttendanceRecord {
+    clockIn: string;
+    clockOut?: string;
+}
 
 export type User = Syncable & {
   id: string;
   name: string;
   role: Role;
+  role_label?: string;
+  /* Support for custom role labels when role is 'Custom' */
   customRoleName?: string;
+  permissions?: UserPermissions;
+  permissions_version?: number;
   email: string;
   avatarUrl: string;
-  password?: string; // Optional for security reasons in a real app
   type: 'hourly' | 'commission';
   hourlyRate?: number;
   attendance?: AttendanceRecord[];
   withdrawals?: Withdrawal[];
   customPayments?: CustomPayment[];
-  status?: 'Active' | 'Invited';
-  // Investor-specific fields
+  status?: 'Active' | 'Invited' | 'Pending Verification';
   initialInvestment?: number;
   investmentDate?: string;
-  sharePercentage?: number;
-  bankDetails?: string;
   phone?: string;
+  permission_audit?: AuditEntry[];
 }
 
 export type PerformanceUser = User & {
@@ -150,13 +246,13 @@ export type PerformanceUser = User & {
     totalCommission: number;
     totalHours: number;
     totalHourlyEarnings: number;
-    totalCommissionWithdrawals: number;
-    totalInvestmentWithdrawals: number;
+    totalWithdrawals: number;
 };
 
 export type CartItem = {
   product: Product;
   variant?: ProductVariant;
+  stock: number;
   quantity: number;
 }
 
@@ -172,12 +268,20 @@ export type Sale = Syncable & {
   total: number;
   paymentMethod?: string;
   taxRate?: number;
-  discountPercentage?: number;
   commission?: number;
-  status: 'completed' | 'proforma' | 'pending_approval' | 'rejected' | 'client_order';
+  status: 'completed' | 'proforma' | 'pending_approval' | 'rejected' | 'client_order' | 'approved_by_owner' | 'pending_bank_verification' | 'completed_bank_verified' | 'rejected_bank_not_verified';
+  bankReceiptNumber?: string;
+  bankName?: string;
+  bankAccountId?: string;
+  verificationNote?: string;
   cashReceived?: number;
   change?: number;
   businessId?: string;
+  businessName?: string;
+  businessPhone?: string;
+  discountPercentage?: number;
+  auditLog?: AuditEntry[];
+  inventory_deducted?: boolean;
 }
 
 export type Expense = Syncable & {
@@ -186,6 +290,8 @@ export type Expense = Syncable & {
   category: string;
   description: string;
   amount: number;
+  status?: 'active' | 'deleted';
+  requestId?: string;
 }
 
 export type ExpenseRequest = Syncable & {
@@ -195,17 +301,111 @@ export type ExpenseRequest = Syncable & {
   category: string;
   description: string;
   amount: number;
+  paymentMethod: 'Cash' | 'Card' | 'Bank Transfer' | 'Other';
+  merchant?: string;
+  attachment?: string;
   status: 'pending' | 'approved' | 'rejected';
-  approvedBy?: string;
-  notes?: string;
+  rejectionReason?: string;
+  auditLog?: AuditEntry[];
 }
 
-export type PrinterSettingsData = Syncable & {
-  autoPrint: boolean;
+export interface CashCountSignature {
+    userId: string;
+    userName: string;
+    role: Role;
+    timestamp: string;
+}
+
+export type CashCountStatus = 'draft' | 'first_signed' | 'second_signed' | 'accepted' | 'rejected';
+
+export type CashCount = Syncable & {
+    id: string;
+    date: string;
+    systemTotal: number;
+    countedTotal: number;
+    difference: number;
+    status: CashCountStatus;
+    notes?: string;
+    signatures: {
+        first?: CashCountSignature;
+        second?: CashCountSignature;
+    };
+    ownerAudit?: {
+        userId: string;
+        userName: string;
+        timestamp: string;
+        status: 'accepted' | 'rejected';
+        note?: string;
+    };
+    auditLog: AuditEntry[];
+}
+
+export interface GoodsCosting {
+    id: string;
+    date: string;
+    productNumber: string;
+    productName: string;
+    quantity: number;
+    buyingUnitPrice: number;
+    additionalCosts: {
+        taxes: number;
+        shipping: number;
+        transport: number;
+        labor: number;
+        transferFees: number;
+        other: number;
+        otherNote: string;
+    };
+    totalBuyingAmount: number;
+    totalAdditionalCosts: number;
+    totalLandedCost: number;
+    unitCost: number;
+    marginPercentage: number;
+    suggestedSellingPrice: number;
+    linkedProductId?: string;
+    status: 'draft' | 'first_signed' | 'second_signed' | 'accepted' | 'rejected';
+    signatures: {
+        first?: CashCountSignature;
+        second?: CashCountSignature;
+    };
+    ownerAudit?: {
+        userId: string;
+        userName: string;
+        timestamp: string;
+        status: 'accepted' | 'rejected';
+        note?: string;
+    };
+    auditLog: AuditEntry[];
+}
+
+export interface GoodsReceiving {
+    id: string;
+    date: string;
+    refNumber: string;
+    productNumber: string;
+    productName: string;
+    expectedQty: number;
+    receivedQty: number;
+    difference: number;
+    status: 'draft' | 'first_signed' | 'second_signed' | 'accepted' | 'rejected';
+    notes?: string;
+    signatures: {
+        first?: CashCountSignature;
+        second?: CashCountSignature;
+    };
+    ownerAudit?: {
+        userId: string;
+        userName: string;
+        timestamp: string;
+        status: 'accepted' | 'rejected';
+        note?: string;
+    };
+    auditLog: AuditEntry[];
+    linkedProductId?: string;
 }
 
 export type ReceiptSettingsData = Syncable & {
-  logo: string | null; // Base64 string or URL
+  logo: string | null;
   businessName: string;
   slogan: string;
   address: string;
@@ -214,59 +414,11 @@ export type ReceiptSettingsData = Syncable & {
   website: string;
   currencySymbol: string;
   receiptPrefix: string;
-  social: {
-    twitter: string;
-    instagram: string;
-  };
+  social: { twitter: string; instagram: string; };
   receiptTitle: string;
   thankYouNote: string;
   termsAndConditions: string;
-  labels: {
-    receiptNumber: string;
-    proformaNumber: string;
-    date: string;
-    time: string;
-    customer: string;
-    cashier: string;
-    payment: string;
-    item: string;
-    total: string; // Header for item total
-    subtotal: string;
-    tax: string;
-    discount: string;
-    grandTotal: string; // Final total
-    itemCode: string;
-    quantity: string;
-    price: string;
-    cashReceived: string;
-    change: string;
-    pMode: string;
-    itemCount: string;
-    unitCount: string;
-    amount: string;
-  }
-}
-
-// Props for components that will need to trigger a sale deletion
-export interface ReceiptsProps {
-    sales: Sale[];
-    t: (key: string) => string;
-    receiptSettings: ReceiptSettingsData;
-    onDeleteSale: (saleId: string) => void;
-    currentUser: User;
-}
-
-export interface Investor {
-  id: string;
-  name: string;
-  avatarUrl: string;
-  initialInvestment: number;
-  investmentDate: string;
-}
-
-export interface CompanyValuation {
-  date: string;
-  value: number;
+  labels: Record<string, string>;
 }
 
 export type OwnerSettings = Syncable & {
@@ -275,56 +427,73 @@ export type OwnerSettings = Syncable & {
   showOnLeaderboard: boolean;
 }
 
-// New type for Admin Panel data
+export interface CompanyValuation {
+    date: string;
+    valuation: number;
+}
+
+export interface LicensingInfo {
+    licenseType: 'Free' | 'Trial' | 'Premium';
+    enrollmentDate: string;
+    trialEndDate: string;
+}
+
 export interface AdminBusinessData {
-  id: string;
-  profile: BusinessProfile;
-  licensingInfo: LicensingInfo;
-  settings: {
-    acceptRemoteOrders: boolean;
-  };
-  owner: {
-    name: string;
-    email: string;
-  };
-  stats: {
-    totalRevenue: number;
-    salesCount: number;
-    userCount: number;
-    joinedDate: string;
-    status: 'Active' | 'Suspended' | 'Pending';
-  };
+    id: string;
+    profile: BusinessProfile;
+    licensingInfo: LicensingInfo;
+    settings: {
+        acceptRemoteOrders: boolean;
+    };
+    owner: {
+        name: string;
+        email: string;
+    };
+    stats: {
+        totalRevenue: number;
+        salesCount: number;
+        userCount: number;
+        joinedDate: string;
+        status: 'Active' | 'Suspended';
+    };
 }
 
-// FIX: Added missing StorefrontProps interface.
-export interface StorefrontProps {
-    products: Product[];
-    cart: CartItem[];
-    customers: Customer[];
-    users: User[];
-    onUpdateCartItem: (product: Product, variant: ProductVariant | undefined, quantity: number) => void;
-    onProcessSale: (sale: Sale) => void;
-    onDeleteSale: (saleId: string) => void;
-    receiptSettings: ReceiptSettingsData;
-    currentUser: User;
-    businessSettings: BusinessSettingsData;
-    t: (key: string) => string;
-}
+/**
+ * MODULE-BASED PERMISSION MATRIX SYSTEM
+ */
 
-// --- NEW PERMISSION TYPES ---
-export const PERMISSION_ACTIONS = ['view', 'add', 'edit', 'delete', 'share', 'export'] as const;
-export type PermissionAction = typeof PERMISSION_ACTIONS[number];
+export type ModuleKey = 
+  | 'SALES' 
+  | 'INVENTORY' 
+  | 'RECEIPTS' 
+  | 'CUSTOMERS' 
+  | 'EXPENSES'
+  | 'EXPENSE_REQUESTS'
+  | 'COMMISSIONS' 
+  | 'INVESTORS' 
+  | 'REPORTS' 
+  | 'FINANCE' 
+  | 'SETTINGS'
+  | 'AI';
 
-export type PermissionSet = {
-    [key in PermissionAction]?: boolean;
-};
+export type UserPermissions = Partial<Record<ModuleKey, Record<string, boolean>>>;
 
-export type UserPermissions = {
-    [path: string]: PermissionSet;
-};
-
-export type AppPermissions = Syncable & {
+export interface AppPermissions {
     roles: Partial<Record<Role, UserPermissions>>;
-    users: Record<string, UserPermissions>; // UserID -> UserPermissions (overrides)
+    users: Record<string, UserPermissions>;
 }
-// --- END NEW PERMISSION TYPES ---
+
+export interface PrinterSettingsData {
+    autoPrint: boolean;
+}
+
+export interface AppNotification {
+    id: string;
+    userId: string;
+    title: string;
+    message: string;
+    timestamp: string;
+    isRead: boolean;
+    link?: string;
+    type: 'info' | 'action_required' | 'success' | 'warning' | 'error' | 'payment' | 'system' | 'order' | 'expense_request';
+}

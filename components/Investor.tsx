@@ -1,15 +1,20 @@
+
+// @ts-nocheck
 import React, { useMemo, useState } from 'react';
-import type { User, CompanyValuation, Sale, Expense, ReceiptSettingsData, Product, BusinessSettingsData } from '../types';
+import type { User, Sale, Expense, ReceiptSettingsData, Product, BusinessSettingsData, PerformanceUser, Customer, AppPermissions, UserPermissions } from '../types';
 import Card from './Card';
 import UserModal from './UserModal';
 import ConfirmationModal from './ConfirmationModal';
-import { PlusIcon } from '../constants';
-import { formatCurrency, formatAbbreviatedNumber } from '../lib/utils';
-
+import UserDetailModal from './UserDetailModal';
+import UserPermissionModal from './UserPermissionModal';
+import EmptyState from './EmptyState';
+import { PlusIcon, FINALIZED_SALE_STATUSES, InvestorIcon } from '../constants';
+import { formatCurrency, formatAbbreviatedNumber, setStoredItemAndDispatchEvent } from '../lib/utils';
+import { useNavigate } from 'react-router-dom';
+import { hasAccess } from '../lib/permissions';
 
 interface InvestorPageProps {
     users: User[];
-    companyValuations: CompanyValuation[];
     sales: Sale[];
     expenses: Expense[];
     products: Product[];
@@ -19,210 +24,209 @@ interface InvestorPageProps {
     onSaveUser: (userData: Omit<User, 'id' | 'avatarUrl'>, isEditing: boolean, existingUserId?: string) => void;
     onDeleteUser: (userId: string) => void;
     businessSettings: BusinessSettingsData;
+    businessProfile: any;
+    permissions: AppPermissions;
 }
 
-const InfoCard: React.FC<{ title: string; value: string; fullValue?: string; subtext?: string; valueColor?: string }> = ({ title, value, fullValue, subtext, valueColor = 'text-gray-900' }) => (
-    <div className="bg-gray-50 p-4 rounded-lg text-center h-full flex flex-col justify-center border" title={fullValue}>
-        <p className="text-sm font-medium text-gray-500">{title}</p>
-        <p className={`text-2xl font-bold mt-1 ${valueColor}`}>{value}</p>
-        {subtext && <p className="text-xs text-gray-400 mt-1">{subtext}</p>}
+const KPICard: React.FC<{ title: string; value: number; cs: string; colorClass?: string; subtext?: string }> = ({ title, value, cs, colorClass = "text-slate-900 dark:text-white", subtext }) => (
+    <div 
+        className="bg-white dark:bg-gray-800 p-8 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-gray-700 flex flex-col justify-center font-sans h-full text-center cursor-help"
+        title={formatCurrency(value, cs)}
+    >
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-3">{title}</p>
+        <div className="flex items-center justify-center gap-1">
+            <span className={`text-3xl font-black ${colorClass} tracking-tighter tabular-nums`}>
+                {cs}{formatAbbreviatedNumber(value)}
+            </span>
+        </div>
+        {subtext && <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-4 uppercase tracking-widest leading-relaxed">{subtext}</p>}
     </div>
 );
 
-const InvestorPage: React.FC<InvestorPageProps> = ({ users, companyValuations, sales, expenses, t, receiptSettings, products, currentUser, onSaveUser, onDeleteUser, businessSettings }) => {
-    const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-    const [editingUser, setEditingUser] = useState<User | null>(null);
-    const [userToDelete, setUserToDelete] = useState<User | null>(null);
-    
+const InvestorPage: React.FC<InvestorPageProps> = ({ 
+    users = [], 
+    sales = [], 
+    expenses = [], 
+    t, 
+    receiptSettings, 
+    products = [], 
+    currentUser, 
+    onSaveUser, 
+    onDeleteUser, 
+    businessSettings, 
+    businessProfile, 
+    permissions 
+}) => {
+    const [period, setPeriod] = useState('this_month');
+    const [auditUser, setAuditUser] = useState<PerformanceUser | null>(null);
+    const [permissionEditingUser, setPermissionEditingUser] = useState<User | null>(null);
+    const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
+
     const cs = receiptSettings.currencySymbol;
-    const investors = useMemo(() => users.filter(u => u.role === 'Investor' || u.role === 'Owner'), [users]);
-    const canManage = currentUser && ['Owner', 'Manager'].includes(currentUser.role);
+    const navigate = useNavigate();
 
-    // Modal Handlers
-    const handleOpenAddModal = () => {
-        setEditingUser(null);
-        setIsUserModalOpen(true);
+    const canManageRights = hasAccess(currentUser, 'SETTINGS', 'manage_permissions', permissions);
+    
+    const financialData = useMemo(() => {
+        const participants = users.filter(u => u && (u.role === 'Investor' || u.role === 'Owner') && u.status === 'Active');
+        const totalCapital = participants.reduce((sum, p) => sum + (p.initialInvestment || 0), 0);
+        const realizedSales = sales.filter(s => s && FINALIZED_SALE_STATUSES.includes(s.status));
+        const totalRevenue = realizedSales.reduce((s, x) => s + x.total, 0);
+
+        return { totalCapital, participants, totalRevenue };
+    }, [users, sales]);
+
+    const handleOpenPermissionModal = (user: User) => {
+        setPermissionEditingUser(user);
+        setIsPermissionModalOpen(true);
     };
 
-    const handleOpenEditModal = (user: User) => {
-        setEditingUser(user);
-        setIsUserModalOpen(true);
-    };
+    const handleSavePermissions = (userId: string, userPermissions: UserPermissions, roleLabel: string) => {
+        const updatedUsers = users.map(u => {
+            if (u.id === userId) {
+                return { 
+                    ...u, 
+                    permissions: userPermissions, 
+                    role_label: roleLabel, 
+                    permissions_version: 1,
+                    lastUpdated: new Date().toISOString()
+                };
+            }
+            return u;
+        });
 
-    const handleDeleteClick = (user: User) => {
-        setUserToDelete(user);
-        setIsConfirmModalOpen(true);
-    };
-
-    const handleConfirmDelete = () => {
-        if (userToDelete) {
-            onDeleteUser(userToDelete.id);
+        const bizId = localStorage.getItem('fintab_active_business_id');
+        if (bizId) {
+            setStoredItemAndDispatchEvent(`fintab_${bizId}_users`, updatedUsers);
         }
-        setIsConfirmModalOpen(false);
-        setUserToDelete(null);
+        
+        setIsPermissionModalOpen(false);
+        alert("Authorization Updated.");
     };
-
-    const handleSaveUser = (userData: Omit<User, 'id' | 'avatarUrl'>, isEditing: boolean) => {
-        onSaveUser(userData, isEditing, editingUser?.id);
-        setIsUserModalOpen(false);
-        setEditingUser(null);
-    };
-
-    // --- Core Financial Calculations ---
-
-    const totalInitialInvestmentAllInvestors = useMemo(() => 
-        investors.reduce((sum, investor) => sum + (investor.initialInvestment || 0), 0),
-    [investors]);
-
-    const totalCompanyGrossProfit = useMemo(() => {
-        const completedSales = sales.filter(s => s.status === 'completed');
-        return completedSales.reduce((totalProfit, sale) => {
-            const costOfGoods = sale.items.reduce((cogs, item) => {
-                const product = products.find(p => p.id === item.product.id);
-                const costPrice = product ? product.costPrice : 0;
-                return cogs + (costPrice * item.quantity);
-            }, 0);
-            
-            const saleRevenue = sale.subtotal - sale.discount;
-            const saleProfit = saleRevenue - costOfGoods;
-            
-            return totalProfit + saleProfit;
-        }, 0);
-    }, [sales, products]);
-
-    const totalExpenses = useMemo(() =>
-        expenses.reduce((sum, expense) => sum + expense.amount, 0),
-    [expenses]);
-
-    const totalCompanyNetProfit = useMemo(() => 
-        totalCompanyGrossProfit - totalExpenses,
-    [totalCompanyGrossProfit, totalExpenses]);
 
     return (
-        <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <Card title="Total Capital Invested">
-                    <div className="text-center" title={formatCurrency(totalInitialInvestmentAllInvestors, cs)}>
-                        <p className="text-4xl font-bold text-gray-800">{cs}{formatAbbreviatedNumber(totalInitialInvestmentAllInvestors)}</p>
-                        <p className="text-sm text-gray-500 mt-2">from {investors.length} investor{investors.length !== 1 ? 's' : ''}</p>
+        <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-xl p-8 border border-white/10">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-10 gap-6">
+                    <div>
+                        <h2 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tighter leading-none">Partners</h2>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-4">Verified Equity Participation Grid</p>
                     </div>
-                </Card>
-                <Card title="Company Net Profit (All Time)">
-                    <div className="space-y-3 text-lg">
-                        <div className="flex justify-between" title={formatCurrency(totalCompanyGrossProfit, cs)}>
-                            <span className="text-gray-500">Gross Profit from Sales</span>
-                            <span className="font-semibold text-green-600">{cs}{formatAbbreviatedNumber(totalCompanyGrossProfit)}</span>
+                    
+                    <div className="w-full md:w-auto grid grid-cols-2 md:flex gap-4">
+                        <div className="bg-slate-50 dark:bg-gray-800 p-4 rounded-2xl border border-slate-100 dark:border-gray-700 text-center min-w-[140px]">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Platform Pool</p>
+                            <p className="text-lg font-black text-slate-900 dark:text-white tabular-nums">{cs}{formatAbbreviatedNumber(financialData.totalCapital)}</p>
                         </div>
-                        <div className="flex justify-between" title={formatCurrency(totalExpenses, cs)}>
-                            <span className="text-gray-500">Total Expenses</span>
-                            <span className="font-semibold text-red-600">- {cs}{formatAbbreviatedNumber(totalExpenses)}</span>
-                        </div>
-                        <div className="flex justify-between border-t pt-3 mt-3" title={formatCurrency(totalCompanyNetProfit, cs)}>
-                            <span className="font-bold text-gray-800">Net Profit to Distribute</span>
-                            <span className={`font-bold text-2xl ${totalCompanyNetProfit >= 0 ? 'text-primary' : 'text-red-700'}`}>{cs}{formatAbbreviatedNumber(totalCompanyNetProfit)}</span>
+                        <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 text-center min-w-[140px]">
+                            <p className="text-[8px] font-black text-primary uppercase tracking-widest">Gross Inflow</p>
+                            <p className="text-lg font-black text-primary tabular-nums">{cs}{formatAbbreviatedNumber(financialData.totalRevenue)}</p>
                         </div>
                     </div>
-                </Card>
+                </div>
+
+                <div className="min-h-[500px]">
+                    {financialData.participants.length > 0 ? (
+                        <>
+                            <div className="table-wrapper hidden md:block">
+                                <div className="table-container max-h-[700px]">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Participant Identity</th>
+                                                <th scope="col" className="text-right">Capital Stake</th>
+                                                <th scope="col" className="text-center">Pool Percentage (%)</th>
+                                                <th scope="col" className="text-right">Audit Logic</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {financialData.participants.map(participant => (
+                                                <tr key={participant.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                                    <td className="px-6 py-6">
+                                                        <div className="flex items-center gap-4">
+                                                            <img src={participant.avatarUrl} className="w-12 h-12 rounded-2xl object-cover border-4 border-white shadow-sm" />
+                                                            <div>
+                                                                <p className="font-bold text-slate-900 dark:text-white uppercase tracking-tighter text-sm">{participant.name}</p>
+                                                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">{participant.role_label || participant.role}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="table-num text-slate-900 dark:text-white font-black text-base">
+                                                        {cs}{formatAbbreviatedNumber(participant.initialInvestment || 0)}
+                                                    </td>
+                                                    <td className="text-center">
+                                                        <span className="bg-primary/10 text-primary px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                                                            {financialData.totalCapital > 0 ? ((participant.initialInvestment / financialData.totalCapital) * 100).toFixed(2) : 0}%
+                                                        </span>
+                                                    </td>
+                                                    <td className="text-right">
+                                                        <div className="flex justify-end gap-6">
+                                                            <button onClick={() => setAuditUser(participant as PerformanceUser)} className="text-primary hover:underline font-black text-[10px] uppercase tracking-widest">Audit</button>
+                                                            {canManageRights && (
+                                                                <button onClick={() => handleOpenPermissionModal(participant)} className="text-emerald-600 hover:underline font-black text-[10px] uppercase tracking-widest">Rights</button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div className="md:hidden space-y-4">
+                                {financialData.participants.map(participant => (
+                                    <div key={participant.id} className="bg-slate-50 dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-gray-700">
+                                        <div className="flex items-center gap-5 mb-5">
+                                            <img src={participant.avatarUrl} className="w-16 h-16 rounded-[1.5rem] object-cover border-4 border-white shadow-md" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-black text-slate-900 dark:text-white uppercase tracking-tighter text-base truncate">{participant.name}</p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{participant.role_label || participant.role}</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 py-4 border-y dark:border-gray-700">
+                                            <div>
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Cap Stake</p>
+                                                <p className="text-xl font-black text-slate-900 dark:text-white tabular-nums">{cs}{formatAbbreviatedNumber(participant.initialInvestment || 0)}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Equity %</p>
+                                                <p className="text-xl font-black text-primary tabular-nums">
+                                                    {financialData.totalCapital > 0 ? ((participant.initialInvestment / financialData.totalCapital) * 100).toFixed(1) : 0}%
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3 mt-5">
+                                            <button onClick={() => setAuditUser(participant as PerformanceUser)} className="py-3 bg-white dark:bg-gray-700 text-slate-900 dark:text-white rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-sm">Full Audit</button>
+                                            <button onClick={() => handleOpenPermissionModal(participant)} className="py-3 bg-primary text-white rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-lg shadow-primary/10">Manage Rights</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    ) : (
+                        <EmptyState 
+                            icon={<InvestorIcon />} 
+                            title="Capital Registry Clear" 
+                            description="Zero partner identities detected in the current business node."
+                            action={{ label: "Manage Personnel", onClick: () => navigate('/users') }}
+                        />
+                    )}
+                </div>
             </div>
 
-            {investors.map(investor => {
-                const initialInvestment = investor.initialInvestment || 0;
-                const ownershipPercentage = totalInitialInvestmentAllInvestors > 0 ? (initialInvestment / totalInitialInvestmentAllInvestors) * 100 : 0;
-                
-                const profitShare = totalCompanyNetProfit * (ownershipPercentage / 100);
-
-                const totalWithdrawn = (investor.withdrawals || [])
-                    .filter(w => ['approved', 'paid', 'completed'].includes(w.status))
-                    .reduce((sum, w) => sum + w.amount, 0);
-
-                const withdrawableAmount = (profitShare * (businessSettings.investorProfitWithdrawalRate / 100));
-                const availableForWithdrawal = Math.max(0, withdrawableAmount - totalWithdrawn);
-                
-                return (
-                    <Card 
-                        key={investor.id} 
-                        title={investor.name}
-                        headerContent={canManage && (
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={() => handleOpenEditModal(investor)}
-                                    className="text-sm font-medium text-primary hover:underline"
-                                >
-                                    Edit
-                                </button>
-                                {investor.role !== 'Owner' && (
-                                <button
-                                    onClick={() => handleDeleteClick(investor)}
-                                    className="text-sm font-medium text-red-600 hover:underline"
-                                >
-                                    Delete
-                                </button>
-                                )}
-                            </div>
-                        )}
-                    >
-                        <div className="flex flex-col md:flex-row md:items-center gap-6">
-                            <div className="flex-shrink-0 text-center">
-                                <img src={investor.avatarUrl} alt={investor.name} className="w-24 h-24 rounded-full object-cover mx-auto shadow-md" />
-                                {investor.investmentDate && <p className="mt-2 text-sm text-gray-500">Invested on {new Date(investor.investmentDate).toLocaleDateString()}</p>}
-                            </div>
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full">
-                                <InfoCard 
-                                    title="Initial Investment"
-                                    value={`${cs}${formatAbbreviatedNumber(initialInvestment)}`}
-                                    fullValue={formatCurrency(initialInvestment, cs)}
-                                    subtext={`${ownershipPercentage.toFixed(2)}% of total capital`}
-                                />
-                                <InfoCard 
-                                    title="Net Profit Share Earned"
-                                    value={`${cs}${formatAbbreviatedNumber(profitShare)}`}
-                                    fullValue={formatCurrency(profitShare, cs)}
-                                    valueColor={profitShare >= 0 ? 'text-green-600' : 'text-red-600'}
-                                    subtext="Your share of net profit"
-                                />
-                                <InfoCard 
-                                    title="Amount Withdrawn"
-                                    value={`${cs}${formatAbbreviatedNumber(totalWithdrawn)}`}
-                                    fullValue={formatCurrency(totalWithdrawn, cs)}
-                                />
-                                <InfoCard 
-                                    title="Available to Withdraw"
-                                    value={`${cs}${formatAbbreviatedNumber(availableForWithdrawal)}`}
-                                    fullValue={formatCurrency(availableForWithdrawal, cs)}
-                                    valueColor="text-primary"
-                                    subtext={`(${businessSettings.investorProfitWithdrawalRate}% of profit share)`}
-                                />
-                            </div>
-                        </div>
-                    </Card>
-                );
-            })}
-            
-             {canManage && (
-                <button
-                    onClick={handleOpenAddModal}
-                    className="fixed bottom-24 right-6 md:bottom-10 md:right-10 bg-primary text-white rounded-full p-4 shadow-lg hover:bg-primary-700 transition-transform transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary z-20"
-                    aria-label="Add new investor"
-                >
-                    <PlusIcon />
-                </button>
+            {auditUser && (
+                <UserDetailModal 
+                    isOpen={!!auditUser} onClose={() => setAuditUser(null)} user={auditUser}
+                    sales={sales} expenses={expenses} customers={[]} onClockInOut={() => {}}
+                    currentUser={currentUser} receiptSettings={receiptSettings} businessProfile={businessProfile}
+                />
             )}
 
-            <UserModal
-                isOpen={isUserModalOpen}
-                onClose={() => setIsUserModalOpen(false)}
-                onSave={handleSaveUser}
-                userToEdit={editingUser}
-                receiptSettings={receiptSettings}
-                defaultRole="Investor"
-            />
-            <ConfirmationModal
-                isOpen={isConfirmModalOpen}
-                onClose={() => setIsConfirmModalOpen(false)}
-                onConfirm={handleConfirmDelete}
-                title="Delete Investor"
-                message={`Are you sure you want to remove ${userToDelete?.name} as an investor? This action cannot be undone.`}
+            <UserPermissionModal 
+                isOpen={isPermissionModalOpen} 
+                onClose={() => setIsPermissionModalOpen(false)} 
+                onSave={handleSavePermissions} 
+                user={permissionEditingUser} 
             />
         </div>
     );

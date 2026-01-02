@@ -1,7 +1,8 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
-import ReactDOM from 'react-dom';
 import type { ReceiptSettingsData } from '../types';
 import { formatCurrency } from '../lib/utils';
+import SafePortal from './SafePortal';
 
 interface PaymentConfirmationModalProps {
     isOpen: boolean;
@@ -28,80 +29,55 @@ const PaymentConfirmationModal: React.FC<PaymentConfirmationModalProps> = ({ isO
 
     useEffect(() => {
         if (isOpen) {
-            // Pre-fill cash received with total for convenience, allowing user to edit
             setCashReceived(total.toFixed(2));
         }
     }, [isOpen, total]);
 
-    const handleConfirm = () => {
-        if (isCashPayment) {
-            if (isNaN(parsedCashReceived) || parsedCashReceived < total) {
-                alert("Cash received must be equal to or greater than the total amount.");
-                return;
-            }
-            onConfirm({ cashReceived: parsedCashReceived, change: change });
-        } else {
-            onConfirm({});
-        }
-    };
+    if (!isOpen) return null;
 
-    const modalRoot = document.getElementById('modal-root');
-    if (!isOpen || !modalRoot) return null;
-
-    return ReactDOM.createPortal(
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-sm">
-                <header className="p-6 border-b text-center">
-                    <h2 className="text-2xl font-bold text-gray-800">Confirm Payment</h2>
-                </header>
-                <main className="p-6 space-y-4">
-                    <div className="text-center">
-                        <p className="text-sm font-medium text-gray-500">Total Amount Due</p>
-                        <p className="text-5xl font-bold text-primary mt-1">{formatCurrency(total, cs)}</p>
-                    </div>
-
-                    {isCashPayment && (
-                        <div className="space-y-4 pt-4 border-t">
-                            <div>
-                                <label htmlFor="cash-received" className="block text-sm font-medium text-gray-700">Cash Received</label>
-                                <div className="mt-1 relative rounded-md shadow-sm">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <span className="text-gray-500 sm:text-sm">{cs}</span>
-                                    </div>
+    return (
+        <SafePortal containerId="modal-root">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" onClick={onClose}>
+                <div 
+                    className="bg-white dark:bg-gray-900 rounded-[2rem] shadow-2xl w-full max-w-sm overflow-hidden animate-scale-in"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <header className="p-6 border-b dark:border-gray-800 text-center">
+                        <h2 className="text-2xl font-bold text-gray-800 dark:text-white uppercase tracking-tighter">Confirm Payment</h2>
+                    </header>
+                    <main className="p-6 space-y-4">
+                        <div className="text-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Amount Due</p>
+                            <p className="text-5xl font-black text-primary mt-1 tabular-nums tracking-tighter">{formatCurrency(total, cs)}</p>
+                        </div>
+                        {isCashPayment && (
+                            <div className="space-y-4 pt-4 border-t dark:border-gray-800">
+                                <div>
+                                    <label htmlFor="cash-received" className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Cash Received</label>
                                     <input
                                         type="number"
-                                        name="cash-received"
                                         id="cash-received"
                                         value={cashReceived}
                                         onChange={(e) => setCashReceived(e.target.value)}
-                                        className="focus:ring-primary focus:border-primary block w-full pl-7 pr-12 sm:text-lg border-gray-300 rounded-md py-2 text-center font-semibold"
-                                        placeholder="0.00"
+                                        className="w-full text-center py-4 text-3xl font-black bg-slate-50 dark:bg-gray-800 border-none rounded-2xl focus:ring-4 focus:ring-primary/10 transition-all outline-none tabular-nums"
                                         step="0.01"
-                                        min={total.toFixed(2)}
                                         autoFocus
                                     />
                                 </div>
+                                <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800">
+                                    <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Change Due:</span>
+                                    <span className="text-2xl font-black text-emerald-600 tabular-nums">{formatCurrency(change, cs)}</span>
+                                </div>
                             </div>
-                            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-md">
-                                <span className="text-lg font-medium text-gray-700">Change Due:</span>
-                                <span className="text-2xl font-bold text-green-600">{formatCurrency(change, cs)}</span>
-                            </div>
-                        </div>
-                    )}
-                </main>
-                <footer className="p-4 bg-gray-50 rounded-b-lg flex sm:justify-center">
-                    <div className="responsive-btn-group-fill-horizontal sm:flex-row-reverse">
-                        <button type="button" onClick={handleConfirm} className="bg-primary text-white hover:bg-blue-700">
-                            Confirm Payment
-                        </button>
-                        <button type="button" onClick={onClose} className="bg-gray-200 text-gray-800 hover:bg-gray-300">
-                            Cancel
-                        </button>
-                    </div>
-                </footer>
+                        )}
+                    </main>
+                    <footer className="p-4 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-800 flex flex-col sm:flex-row gap-3">
+                        <button type="button" onClick={() => onConfirm(isCashPayment ? { cashReceived: parsedCashReceived, change } : {})} className="btn-base btn-primary flex-1 py-4">Confirm Settlement</button>
+                        <button type="button" onClick={onClose} className="btn-base btn-secondary flex-1 py-4">Cancel</button>
+                    </footer>
+                </div>
             </div>
-        </div>,
-        modalRoot
+        </SafePortal>
     );
 };
 

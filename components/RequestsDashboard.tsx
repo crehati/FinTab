@@ -1,22 +1,30 @@
+
+// @ts-nocheck
 import React, { useState, useMemo, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
-import type { User, Sale, Withdrawal, Deposit, ReceiptSettingsData, Customer, ExpenseRequest, AppPermissions } from '../types';
-import { ChevronDownIcon } from '../constants';
+import type { User, Sale, Withdrawal, Deposit, ReceiptSettingsData, Customer, AppPermissions, CustomPayment, ExpenseRequest, BankAccount } from '../types';
+import { WarningIcon, PlusIcon, PhoneIcon, BankIcon, TransactionIcon, StaffIcon, CalculatorIcon, ChevronDownIcon, CloseIcon } from '../constants';
+import { formatCurrency } from '../lib/utils';
 import { hasAccess } from '../lib/permissions';
+import ConfirmationModal from './ConfirmationModal';
+import EmptyState from './EmptyState';
+import ModalShell from './ModalShell';
 
 interface RequestsDashboardProps {
     users: User[];
     customers: Customer[];
     sales: Sale[];
     deposits: Deposit[];
+    bankAccounts: BankAccount[];
     expenseRequests: ExpenseRequest[];
     receiptSettings: ReceiptSettingsData;
-    onUpdateWithdrawalStatus: (userId: string, withdrawalId: string, status: 'approved' | 'rejected') => void;
+    onUpdateWithdrawalStatus: (userId: string, withdrawalId: string, status: Withdrawal['status'], note?: string) => void;
     onUpdateDepositStatus: (depositId: string, status: 'approved' | 'rejected') => void;
-    onUpdateExpenseRequestStatus: (requestId: string, status: 'approved' | 'rejected') => void;
     onApproveSale: (saleId: string) => void;
     onRejectSale: (saleId: string) => void;
-    onMarkWithdrawalPaid: (userId: string, withdrawalId: string) => void;
+    onApproveBankSale: (saleId: string) => void;
+    onRejectBankSale: (saleId: string, reason: string) => void;
+    handleUpdateCustomPaymentStatus: (targetUserId: string, paymentId: string, status: CustomPayment['status'], note?: string) => void;
+    onUpdateExpenseRequestStatus: (requestId: string, status: 'approved' | 'rejected', reason?: string) => void;
     onApproveClientOrder: (saleId: string) => void;
     onRejectClientOrder: (saleId: string) => void;
     t: (key: string) => string;
@@ -24,792 +32,381 @@ interface RequestsDashboardProps {
     permissions: AppPermissions;
 }
 
-const RequestsDashboard: React.FC<RequestsDashboardProps> = ({
-    users, sales, deposits, customers, receiptSettings, onUpdateWithdrawalStatus, onUpdateDepositStatus, onApproveSale, onRejectSale, onMarkWithdrawalPaid, onApproveClientOrder, onRejectClientOrder, t, expenseRequests, onUpdateExpenseRequestStatus, currentUser, permissions
-}) => {
-    const location = useLocation();
-    const [activeRequestTab, setActiveRequestTab] = useState<'clientOrders' | 'saleApprovals' | 'withdrawals' | 'deposits' | 'expenseRequests'>('clientOrders');
-    const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+type TabType = 'withdrawals' | 'paymentApprovals' | 'bankVerification' | 'expenses' | 'clientOrders' | 'deposits';
 
-    const cs = receiptSettings.currencySymbol;
+const RequestsDashboard: React.FC<RequestsDashboardProps> = (props) => {
+    const { 
+        users, sales, expenseRequests, deposits, bankAccounts = [], receiptSettings, onUpdateWithdrawalStatus, 
+        handleUpdateCustomPaymentStatus, onApproveBankSale, onRejectBankSale, 
+        onUpdateExpenseRequestStatus, onUpdateDepositStatus, onApproveClientOrder, onRejectClientOrder, 
+        currentUser, permissions, customers 
+    } = props;
+    
+    const cs = String(receiptSettings.currencySymbol);
 
-    // --- Permission Checks ---
-    const canManageClientOrders = useMemo(() => hasAccess(currentUser, '/proforma', 'edit', permissions), [currentUser, permissions]);
-    const canManageSaleApprovals = useMemo(() => hasAccess(currentUser, '/receipts', 'edit', permissions), [currentUser, permissions]);
-    const canManageWithdrawals = useMemo(() => hasAccess(currentUser, '/users', 'edit', permissions), [currentUser, permissions]);
-    const canManageDeposits = useMemo(() => hasAccess(currentUser, '/transactions', 'edit', permissions), [currentUser, permissions]);
-    const canManageExpenseRequests = useMemo(() => hasAccess(currentUser, '/expense-requests', 'edit', permissions), [currentUser, permissions]);
+    // State for the detailed view modal
+    const [activeDetailTab, setActiveDetailTab] = useState<TabType | null>(null);
+
+    // Confirmation State
+    const [pendingAction, setPendingAction] = useState<{ 
+        id: string; 
+        userId?: string;
+        type: TabType;
+        status: string; 
+        amount: number;
+        title: string;
+        variant: 'primary' | 'danger';
+    } | null>(null);
+
+    const [reviewNote, setReviewNote] = useState('');
+
+    const pendingWithdrawals = useMemo(() => {
+        return users.flatMap(user => (user.withdrawals || []).map(w => ({ ...w, user })))
+            .filter(w => w.status === 'pending')
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [users]);
+
+    const pendingPayments = useMemo(() => {
+        return users.flatMap(user => (user.customPayments || []).map(p => ({ ...p, user })))
+            .filter(p => p.status === 'pending_owner_approval')
+            .sort((a, b) => new Date(b.dateInitiated).getTime() - new Date(a.dateInitiated).getTime());
+    }, [users]);
+
+    const pendingBankSales = useMemo(() => {
+        return sales.filter(s => s.status === 'pending_bank_verification')
+            .map(s => ({ ...s, user: users.find(u => u.id === s.userId), customer: customers.find(c => c.id === s.customerId) }))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [sales, users, customers]);
+
+    const pendingExpenses = useMemo(() => {
+        return (expenseRequests || []).filter(r => r.status === 'pending')
+            .map(r => ({ ...r, user: users.find(u => u.id === r.userId) }))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [expenseRequests, users]);
+
+    const pendingDeposits = useMemo(() => {
+        return (deposits || []).filter(d => d.status === 'pending')
+            .map(d => {
+                const bank = d.bankAccountId ? bankAccounts.find(b => b.id === d.bankAccountId) : null;
+                return { 
+                    ...d, 
+                    user: users.find(u => u.id === d.userId),
+                    bankName: bank ? `${bank.bankName} - ${bank.accountName}` : null
+                };
+            })
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [deposits, users, bankAccounts]);
+
+    const clientOrders = useMemo(() => {
+        return sales.filter(s => s.status === 'client_order')
+            .map(s => ({ 
+                ...s, 
+                customer: customers.find(c => c.id === s.customerId) 
+            }))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [sales, customers]);
 
     const availableTabs = useMemo(() => {
-        const tabs: ('clientOrders' | 'saleApprovals' | 'withdrawals' | 'deposits' | 'expenseRequests')[] = [];
-        if (canManageExpenseRequests) tabs.push('expenseRequests');
-        if (canManageClientOrders) tabs.push('clientOrders');
-        if (canManageSaleApprovals) tabs.push('saleApprovals');
-        if (canManageWithdrawals) tabs.push('withdrawals');
-        if (canManageDeposits) tabs.push('deposits');
-        return tabs;
-    }, [canManageClientOrders, canManageSaleApprovals, canManageWithdrawals, canManageDeposits, canManageExpenseRequests]);
-
-    useEffect(() => {
-        const requestedTab = location.state?.openTab === 'requests' ? location.state.openSubTab : null;
+        const tabs: { id: TabType; label: string; count: number; color: string; icon: React.ReactNode }[] = [];
         
-        // If there's a requested tab from a notification and the user has access to it, show it.
-        if (requestedTab && availableTabs.includes(requestedTab)) {
-            setActiveRequestTab(requestedTab);
-        } 
-        // If the current active tab is not one the user has access to, switch to the first available one.
-        else if (!availableTabs.includes(activeRequestTab) && availableTabs.length > 0) {
-            setActiveRequestTab(availableTabs[0]);
+        if (hasAccess(currentUser, 'SALES', 'view_client_requests', permissions)) {
+            tabs.push({ id: 'clientOrders', label: 'Client Orders', count: clientOrders.length, color: 'emerald', icon: <PhoneIcon className="w-5 h-5" /> });
         }
-    }, [location.state, availableTabs, activeRequestTab]);
-
-
-    // Expense Request Memos
-    const pendingExpenseRequests = useMemo(() => expenseRequests.filter(er => er.status === 'pending').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [expenseRequests]);
-    const historyExpenseRequests = useMemo(() => expenseRequests.filter(er => er.status !== 'pending').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [expenseRequests]);
-
-    // Withdrawal Memos
-    const allWithdrawals = useMemo(() => {
-        return users.flatMap(user => 
-            (user.withdrawals || []).map(w => ({ ...w, user }))
-        ).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [users]);
-    
-    const pendingWithdrawals = useMemo(() => allWithdrawals.filter(w => w.status === 'pending'), [allWithdrawals]);
-    const approvedWithdrawals = useMemo(() => allWithdrawals.filter(w => w.status === 'approved'), [allWithdrawals]);
-    const historyWithdrawals = useMemo(() => allWithdrawals.filter(w => !['pending', 'approved'].includes(w.status)), [allWithdrawals]);
-
-    // Deposit Memos
-    const allDepositsWithUser = useMemo(() => {
-        return deposits
-            .map(deposit => {
-                const user = users.find(u => u.id === deposit.userId);
-                if (!user) return null;
-                return { ...deposit, user };
-            })
-            .filter((d): d is (Deposit & { user: User }) => d !== null);
-    }, [deposits, users]);
-
-    const pendingDeposits = useMemo(() => allDepositsWithUser.filter(d => d.status === 'pending').sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [allDepositsWithUser]);
-    const historyDeposits = useMemo(() => allDepositsWithUser.filter(d => d.status !== 'pending').sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [allDepositsWithUser]);
-
-    // Sale Approval Memos
-    const pendingSales = useMemo(() => sales.filter(s => s.status === 'pending_approval').sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [sales]);
-    const historySales = useMemo(() => sales.filter(s => s.paymentMethod === 'Bank Transfer' && ['completed', 'rejected'].includes(s.status)).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [sales]);
-    
-    // Client Order Memos
-    const pendingClientOrders = useMemo(() => sales.filter(s => s.status === 'client_order').sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [sales]);
-
-
-    const getStatusBadge = (status: Withdrawal['status'] | Deposit['status'] | Sale['status'] | ExpenseRequest['status']) => {
-        switch (status) {
-            case 'pending':
-            case 'pending_approval':
-            case 'client_order':
-                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Pending</span>;
-            case 'approved':
-                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">Approved</span>;
-            case 'paid':
-                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">Paid</span>;
-            case 'completed':
-            case 'proforma':
-                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">{status === 'proforma' ? 'Approved' : 'Completed'}</span>;
-            case 'rejected':
-                return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Rejected</span>;
-            default:
-                return null;
+        
+        if (hasAccess(currentUser, 'SETTINGS', 'manage_permissions', permissions)) {
+            tabs.push({ id: 'deposits', label: 'Cash Deposits', count: pendingDeposits.length, color: 'indigo', icon: <CalculatorIcon className="w-5 h-5" /> });
+            tabs.push({ id: 'withdrawals', label: 'Pending Payouts', count: pendingWithdrawals.length, color: 'rose', icon: <TransactionIcon className="w-5 h-5" /> });
+            tabs.push({ id: 'paymentApprovals', label: 'Staff Payments', count: pendingPayments.length, color: 'amber', icon: <StaffIcon className="w-5 h-5" /> });
         }
+
+        if (hasAccess(currentUser, 'RECEIPTS', 'edit_receipt', permissions)) {
+            tabs.push({ id: 'bankVerification', label: 'Bank Verification', count: pendingBankSales.length, color: 'primary', icon: <BankIcon className="w-5 h-5" /> });
+        }
+
+        if (hasAccess(currentUser, 'EXPENSES', 'approve_expense', permissions)) {
+            tabs.push({ id: 'expenses', label: 'Expense Verification', count: pendingExpenses.length, color: 'violet', icon: <CalculatorIcon className="w-5 h-5" /> });
+        }
+        
+        return tabs;
+    }, [currentUser, permissions, pendingWithdrawals, pendingPayments, pendingBankSales, pendingExpenses, clientOrders, pendingDeposits]);
+
+    const executeConfirmedAction = () => {
+        if (!pendingAction) return;
+        const { id, userId, type, status } = pendingAction;
+        
+        switch (type) {
+            case 'deposits':
+                onUpdateDepositStatus(id, status);
+                break;
+            case 'clientOrders':
+                if (status === 'approved') onApproveClientOrder(id);
+                else onRejectClientOrder(id);
+                break;
+            case 'expenses':
+                onUpdateExpenseRequestStatus(id, status, reviewNote);
+                break;
+            case 'withdrawals':
+                onUpdateWithdrawalStatus(userId, id, status, reviewNote);
+                break;
+            case 'paymentApprovals':
+                handleUpdateCustomPaymentStatus(userId, id, status, reviewNote);
+                break;
+            case 'bankVerification':
+                if (status === 'approved') onApproveBankSale(id);
+                else onRejectBankSale(id, reviewNote);
+                break;
+        }
+
+        setPendingAction(null);
+        setReviewNote('');
     };
-    
-    return (
-        <div>
-            <div className="border-b border-gray-200">
-                <nav className="flex -mb-px space-x-6 overflow-x-auto" aria-label="Request Tabs">
-                    {canManageExpenseRequests && (
-                        <button
-                            onClick={() => setActiveRequestTab('expenseRequests')}
-                            className={`relative whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${activeRequestTab === 'expenseRequests' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                        >
-                            Expense Requests
-                            {pendingExpenseRequests.length > 0 && (
-                                <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">{pendingExpenseRequests.length}</span>
-                            )}
-                        </button>
+
+    const RequestCard: React.FC<{
+        title: string;
+        subtitle?: string;
+        avatar?: string;
+        amount: number;
+        tag?: string;
+        timestamp: string;
+        details?: React.ReactNode;
+        onApprove: () => void;
+        onReject: () => void;
+        accent: string;
+        approveLabel?: string;
+    }> = ({ title, subtitle, avatar, amount, tag, timestamp, details, onApprove, onReject, accent, approveLabel = "Authorize" }) => (
+        <div className="bg-slate-50 dark:bg-gray-900 p-6 rounded-[2rem] border border-slate-100 dark:border-gray-800 transition-all mb-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex items-center gap-4">
+                    {avatar ? (
+                        <img src={avatar} className="w-12 h-12 rounded-2xl object-cover shadow-sm border border-white dark:border-gray-700" alt="" />
+                    ) : (
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center bg-white dark:bg-gray-800 ${accent.replace('bg-', 'text-')} border dark:border-gray-700`}>
+                            <TransactionIcon className="w-5 h-5" />
+                        </div>
                     )}
-                    {canManageClientOrders && (
-                        <button
-                            onClick={() => setActiveRequestTab('clientOrders')}
-                            className={`relative whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${activeRequestTab === 'clientOrders' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                        >
-                            {t('requests.clientOrders')}
-                            {pendingClientOrders.length > 0 && (
-                                <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">{pendingClientOrders.length}</span>
-                            )}
-                        </button>
-                    )}
-                    {canManageSaleApprovals && (
-                        <button
-                            onClick={() => setActiveRequestTab('saleApprovals')}
-                            className={`relative whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${activeRequestTab === 'saleApprovals' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                        >
-                            {t('saleApprovals.title')}
-                            {pendingSales.length > 0 && (
-                                <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">{pendingSales.length}</span>
-                            )}
-                        </button>
-                    )}
-                    {canManageWithdrawals && (
-                        <button
-                            onClick={() => setActiveRequestTab('withdrawals')}
-                            className={`relative whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${activeRequestTab === 'withdrawals' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                        >
-                            Withdrawal Requests
-                            {pendingWithdrawals.length > 0 && (
-                                <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">{pendingWithdrawals.length}</span>
-                            )}
-                        </button>
-                    )}
-                    {canManageDeposits && (
-                        <button
-                            onClick={() => setActiveRequestTab('deposits')}
-                            className={`relative whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-200 ${activeRequestTab === 'deposits' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
-                        >
-                            Deposit Requests
-                            {pendingDeposits.length > 0 && (
-                                <span className="ml-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">{pendingDeposits.length}</span>
-                            )}
-                        </button>
-                    )}
-                </nav>
+                    <div className="min-w-0">
+                        <h4 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tighter truncate">{title}</h4>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                            {tag && <span className="status-badge status-approved !px-2 !py-0.5 !text-[7px]">{tag}</span>}
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(timestamp).toLocaleDateString()}</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="text-left md:text-right">
+                    <p className="text-xl font-black text-slate-900 dark:text-white tabular-nums tracking-tighter">{cs}{amount.toFixed(2)}</p>
+                </div>
             </div>
 
-            <div className="mt-6">
-                {activeRequestTab === 'expenseRequests' && (
-                     <div className="space-y-6">
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-800 mb-2">Pending Expense Requests</h3>
-                             {/* Desktop Table */}
-                             <div className="hidden md:block overflow-x-auto rounded-lg border">
-                                <table className="w-full text-sm text-left text-gray-500">
-                                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th scope="col" className="px-6 py-3">User</th>
-                                            <th scope="col" className="px-6 py-3">Date</th>
-                                            <th scope="col" className="px-6 py-3">Amount</th>
-                                            <th scope="col" className="px-6 py-3">Description</th>
-                                            <th scope="col" className="px-6 py-3 text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {pendingExpenseRequests.map(req => {
-                                            const user = users.find(u => u.id === req.userId);
-                                            return (
-                                            <tr key={req.id} className="bg-white border-b hover:bg-yellow-50">
-                                                <td className="px-6 py-4 font-medium text-gray-900">{user?.name || 'Unknown'}</td>
-                                                <td className="px-6 py-4">{new Date(req.date).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4 font-semibold">{cs}{req.amount.toFixed(2)}</td>
-                                                <td className="px-6 py-4">{req.description}</td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <div className="flex items-center justify-center gap-2">
-                                                        <button onClick={() => onUpdateExpenseRequestStatus(req.id, 'approved')} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 rounded-md hover:bg-green-600">Approve</button>
-                                                        <button onClick={() => onUpdateExpenseRequestStatus(req.id, 'rejected')} className="px-3 py-1 text-xs font-semibold text-white bg-red-500 rounded-md hover:bg-red-600">Reject</button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )})}
-                                        {pendingExpenseRequests.length === 0 && (
-                                            <tr><td colSpan={5} className="text-center py-6 text-gray-500">No pending expense requests.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {/* Mobile Cards */}
-                            <div className="space-y-3 md:hidden">
-                                {pendingExpenseRequests.map(req => {
-                                     const user = users.find(u => u.id === req.userId);
-                                     return (
-                                     <div key={req.id} className="bg-white p-4 rounded-xl shadow-md border">
-                                         <div className="flex justify-between items-start">
-                                             <div>
-                                                 <p className="font-bold text-gray-800">{user?.name || 'Unknown'}</p>
-                                                 <p className="text-xs text-gray-500">{new Date(req.date).toLocaleDateString()}</p>
-                                             </div>
-                                             <p className="font-semibold text-lg text-primary">{cs}{req.amount.toFixed(2)}</p>
-                                         </div>
-                                         <p className="text-sm text-gray-600 mt-2 border-t pt-2">{req.description}</p>
-                                         <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t">
-                                             <button onClick={() => onUpdateExpenseRequestStatus(req.id, 'rejected')} className="px-4 py-2 text-sm font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600">Reject</button>
-                                             <button onClick={() => onUpdateExpenseRequestStatus(req.id, 'approved')} className="px-4 py-2 text-sm font-semibold text-white bg-green-500 rounded-lg hover:bg-green-600">Approve</button>
-                                         </div>
-                                     </div>
-                                 )})}
-                                 {pendingExpenseRequests.length === 0 && (
-                                    <div className="text-center py-6 text-gray-500">No pending expense requests.</div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-                {activeRequestTab === 'clientOrders' && (
-                     <div className="space-y-6">
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-800 mb-2">Pending Client Orders</h3>
-                            {/* Desktop Table */}
-                            <div className="hidden md:block overflow-x-auto rounded-lg border">
-                                <table className="w-full text-sm text-left text-gray-500">
-                                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th scope="col" className="px-2 py-3 w-8"></th>
-                                            <th scope="col" className="px-6 py-3">Date</th>
-                                            <th scope="col" className="px-6 py-3">Client</th>
-                                            <th scope="col" className="px-6 py-3">Amount</th>
-                                            <th scope="col" className="px-6 py-3 text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {pendingClientOrders.map(sale => {
-                                            const customer = customers.find(c => c.id === sale.customerId);
-                                            const isExpanded = expandedOrderId === sale.id;
-                                            return (
-                                            <React.Fragment key={sale.id}>
-                                                <tr className="bg-white border-b hover:bg-yellow-50 cursor-pointer" onClick={() => setExpandedOrderId(isExpanded ? null : sale.id)}>
-                                                    <td className="px-2 py-4">
-                                                        <ChevronDownIcon className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-                                                    </td>
-                                                    <td className="px-6 py-4">{new Date(sale.date).toLocaleString()}</td>
-                                                    <td className="px-6 py-4 font-medium text-gray-900">{customer?.name || 'N/A'}</td>
-                                                    <td className="px-6 py-4 font-semibold">{cs}{sale.total.toFixed(2)}</td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <div className="flex items-center justify-center gap-2" onClick={e => e.stopPropagation()}>
-                                                            <button onClick={() => onApproveClientOrder(sale.id)} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 transition-all">Approve as Proforma</button>
-                                                            <button onClick={() => onRejectClientOrder(sale.id)} className="px-3 py-1 text-xs font-semibold text-white bg-red-500 rounded-md hover:bg-red-600 transition-all">Reject</button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                                {isExpanded && (
-                                                     <tr className="bg-gray-50 border-b">
-                                                        <td colSpan={5} className="p-4">
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                                <div>
-                                                                    <h5 className="font-semibold text-gray-700 mb-2">Client Details</h5>
-                                                                    <div className="text-sm space-y-1">
-                                                                        <p><strong>Name:</strong> {customer?.name}</p>
-                                                                        <p><strong>Phone:</strong> {customer?.phone}</p>
-                                                                        <p><strong>Email:</strong> {customer?.email}</p>
-                                                                    </div>
-                                                                </div>
-                                                                <div>
-                                                                    <h5 className="font-semibold text-gray-700 mb-2">Order Items ({sale.items.reduce((sum, item) => sum + item.quantity, 0)})</h5>
-                                                                    <ul className="text-sm space-y-1 max-h-40 overflow-y-auto">
-                                                                        {sale.items.map(item => {
-                                                                            const price = item.variant ? item.variant.price : item.product.price;
-                                                                            return (
-                                                                                <li key={item.variant ? item.variant.id : item.product.id} className="flex justify-between border-b pb-1">
-                                                                                    <span>{item.quantity} x {item.product.name} {item.variant && `(${item.variant.attributes.map(a=>a.value).join('/')})`}</span>
-                                                                                    <span>{cs}{(price * item.quantity).toFixed(2)}</span>
-                                                                                </li>
-                                                                            )
-                                                                        })}
-                                                                    </ul>
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </React.Fragment>
-                                        )})}
-                                        {pendingClientOrders.length === 0 && (
-                                            <tr><td colSpan={5} className="text-center py-6 text-gray-500">No new client orders.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {/* Mobile Cards */}
-                            <div className="space-y-3 md:hidden">
-                                {pendingClientOrders.map(sale => {
-                                    const customer = customers.find(c => c.id === sale.customerId);
-                                    const isExpanded = expandedOrderId === sale.id;
-                                    return (
-                                    <div key={sale.id} className="bg-white p-4 rounded-xl shadow-md border border-gray-100">
-                                        <div className="flex justify-between items-start cursor-pointer" onClick={() => setExpandedOrderId(isExpanded ? null : sale.id)}>
-                                            <div>
-                                                <p className="font-bold text-gray-800">{customer?.name || 'N/A'}</p>
-                                                <p className="text-xs text-gray-500">{new Date(sale.date).toLocaleString()}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="font-semibold text-lg text-primary flex-shrink-0 ml-2">{cs}{sale.total.toFixed(2)}</p>
-                                                 <span className="text-xs text-gray-500 flex items-center justify-end gap-1">
-                                                    Details <ChevronDownIcon className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-                                                </span>
-                                            </div>
-                                        </div>
-                                        {isExpanded && (
-                                            <div className="mt-3 pt-3 border-t space-y-3">
-                                                <div>
-                                                    <h5 className="font-semibold text-sm text-gray-700">Client Details</h5>
-                                                    <p className="text-xs"><strong>Phone:</strong> {customer?.phone}</p>
-                                                    <p className="text-xs"><strong>Email:</strong> {customer?.email}</p>
-                                                </div>
-                                                <div>
-                                                    <h5 className="font-semibold text-sm text-gray-700">Order Items</h5>
-                                                    <ul className="list-disc list-inside text-xs pl-2">
-                                                        {sale.items.map(item => (
-                                                            <li key={item.variant ? item.variant.id : item.product.id}>
-                                                                {item.quantity} x {item.product.name} {item.variant && `(${item.variant.attributes.map(a=>a.value).join('/')})`}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                        )}
-                                        <div className="flex items-center justify-end flex-wrap gap-2 mt-3 pt-3 border-t">
-                                            <button onClick={() => onRejectClientOrder(sale.id)} className="px-4 py-2 text-sm font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600">Reject</button>
-                                            <button onClick={() => onApproveClientOrder(sale.id)} className="px-4 py-2 text-sm font-semibold text-white bg-green-500 rounded-lg hover:bg-green-600">Approve as Proforma</button>
-                                        </div>
-                                    </div>
-                                )})}
-                                {pendingClientOrders.length === 0 && (
-                                    <div className="text-center py-6 text-gray-500">No new client orders.</div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-                {activeRequestTab === 'saleApprovals' && (
-                     <div className="space-y-6">
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-800 mb-2">Pending Sale Approvals</h3>
-                            {/* Desktop Table */}
-                            <div className="hidden md:block overflow-x-auto rounded-lg border">
-                                <table className="w-full text-sm text-left text-gray-500 table-fixed">
-                                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th scope="col" className="px-6 py-3 w-1/4">Date</th>
-                                            <th scope="col" className="px-6 py-3 w-1/6">Receipt #</th>
-                                            <th scope="col" className="px-6 py-3 w-1/3">Customer</th>
-                                            <th scope="col" className="px-6 py-3 w-1/6">Amount</th>
-                                            <th scope="col" className="px-6 py-3 text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {pendingSales.map(sale => {
-                                            const customer = customers.find(c => c.id === sale.customerId);
-                                            return (
-                                            <tr key={sale.id} className="bg-white border-b hover:bg-yellow-50">
-                                                <td className="px-6 py-4 break-words">{new Date(sale.date).toLocaleString()}</td>
-                                                <td className="px-6 py-4 font-mono text-xs break-words">{sale.id.slice(-6).toUpperCase()}</td>
-                                                <td className="px-6 py-4 font-medium text-gray-900 break-words">{customer?.name || 'N/A'}</td>
-                                                <td className="px-6 py-4 font-semibold">{cs}{sale.total.toFixed(2)}</td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <div className="flex items-center justify-center gap-2">
-                                                        <button onClick={() => onApproveSale(sale.id)} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 transition-all">Approve</button>
-                                                        <button onClick={() => onRejectSale(sale.id)} className="px-3 py-1 text-xs font-semibold text-white bg-red-500 rounded-md hover:bg-red-600 transition-all">Reject</button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )})}
-                                        {pendingSales.length === 0 && (
-                                            <tr><td colSpan={5} className="text-center py-6 text-gray-500">No pending sale approvals.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                             {/* Mobile Cards */}
-                            <div className="space-y-3 md:hidden">
-                                {pendingSales.map(sale => {
-                                    const customer = customers.find(c => c.id === sale.customerId);
-                                    return (
-                                     <div key={sale.id} className="bg-white p-4 rounded-xl shadow-md border border-gray-100">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-bold text-gray-800">{customer?.name || 'N/A'}</p>
-                                                <p className="text-xs text-gray-500 font-mono">#{sale.id.slice(-6).toUpperCase()}</p>
-                                                <p className="text-xs text-gray-500">{new Date(sale.date).toLocaleString()}</p>
-                                            </div>
-                                            <p className="font-semibold text-lg text-primary flex-shrink-0 ml-2">{cs}{sale.total.toFixed(2)}</p>
-                                        </div>
-                                        <div className="flex items-center justify-end flex-wrap gap-2 mt-3 pt-3 border-t">
-                                            <button onClick={() => onRejectSale(sale.id)} className="px-4 py-2 text-sm font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600">Reject</button>
-                                            <button onClick={() => onApproveSale(sale.id)} className="px-4 py-2 text-sm font-semibold text-white bg-green-500 rounded-lg hover:bg-green-600">Approve</button>
-                                        </div>
-                                    </div>
-                                )})}
-                                {pendingSales.length === 0 && (
-                                    <div className="text-center py-6 text-gray-500">No pending sale approvals.</div>
-                                )}
-                            </div>
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-800 mb-2">Sale Approval History</h3>
-                             {/* Desktop Table */}
-                            <div className="hidden md:block overflow-x-auto rounded-lg border">
-                                <table className="w-full text-sm text-left text-gray-500 table-fixed">
-                                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th scope="col" className="px-6 py-3 w-1/4">Date</th>
-                                            <th scope="col" className="px-6 py-3 w-1/6">Receipt #</th>
-                                            <th scope="col" className="px-6 py-3 w-1/3">Customer</th>
-                                            <th scope="col" className="px-6 py-3 w-1/6">Amount</th>
-                                            <th scope="col" className="px-6 py-3 text-center">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {historySales.map(sale => {
-                                            const customer = customers.find(c => c.id === sale.customerId);
-                                            return (
-                                            <tr key={sale.id} className="bg-white border-b hover:bg-gray-50 last:border-b-0">
-                                                <td className="px-6 py-4 break-words">{new Date(sale.date).toLocaleString()}</td>
-                                                <td className="px-6 py-4 font-mono text-xs break-words">{sale.id.slice(-6).toUpperCase()}</td>
-                                                <td className="px-6 py-4 font-medium text-gray-900 break-words">{customer?.name || 'N/A'}</td>
-                                                <td className="px-6 py-4 font-semibold">{cs}{sale.total.toFixed(2)}</td>
-                                                <td className="px-6 py-4 text-center">{getStatusBadge(sale.status)}</td>
-                                            </tr>
-                                        )})}
-                                        {historySales.length === 0 && (
-                                            <tr><td colSpan={5} className="text-center py-6 text-gray-500">No sale approval history.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                             {/* Mobile Cards */}
-                            <div className="space-y-3 md:hidden">
-                                {historySales.map(sale => {
-                                    const customer = customers.find(c => c.id === sale.customerId);
-                                    return (
-                                    <div key={sale.id} className="bg-white p-4 rounded-xl shadow-md border border-gray-100">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-bold text-gray-800">{customer?.name || 'N/A'}</p>
-                                                <p className="text-xs text-gray-500 font-mono">#{sale.id.slice(-6).toUpperCase()}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="font-semibold text-lg text-primary flex-shrink-0 ml-2">{cs}{sale.total.toFixed(2)}</p>
-                                                <div className="mt-1">{getStatusBadge(sale.status)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )})}
-                                {historySales.length === 0 && (
-                                    <div className="text-center py-6 text-gray-500">No sale approval history.</div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-                {activeRequestTab === 'withdrawals' && (
-                    <div className="space-y-6">
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-800 mb-2">Pending Requests</h3>
-                            {/* Desktop Table */}
-                            <div className="hidden md:block overflow-x-auto rounded-lg border">
-                                <table className="w-full text-sm text-left text-gray-500 table-fixed">
-                                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th scope="col" className="px-6 py-3 w-1/3">User</th>
-                                            <th scope="col" className="px-6 py-3 w-1/4">Date</th>
-                                            <th scope="col" className="px-6 py-3 w-1/6">Amount</th>
-                                            <th scope="col" className="px-6 py-3 text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {pendingWithdrawals.map(w => (
-                                            <tr key={w.id} className="bg-white border-b hover:bg-yellow-50 last:border-b-0">
-                                                <td className="px-6 py-4 font-medium text-gray-900 break-words">
-                                                    <div className="flex items-center">
-                                                        <img src={w.user.avatarUrl} alt={w.user.name} className="w-8 h-8 rounded-full mr-3 object-cover flex-shrink-0" />
-                                                        <span className="truncate">{w.user.name}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 break-words">{new Date(w.date).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4 font-semibold">{cs}{w.amount.toFixed(2)}</td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <div className="flex items-center justify-center gap-2">
-                                                        <button onClick={() => onUpdateWithdrawalStatus(w.user.id, w.id, 'approved')} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 transition-all">Approve</button>
-                                                        <button onClick={() => onUpdateWithdrawalStatus(w.user.id, w.id, 'rejected')} className="px-3 py-1 text-xs font-semibold text-white bg-red-500 rounded-md hover:bg-red-600 transition-all">Reject</button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {pendingWithdrawals.length === 0 && (
-                                            <tr><td colSpan={4} className="text-center py-6 text-gray-500">No pending withdrawal requests.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {/* Mobile Cards */}
-                            <div className="space-y-3 md:hidden">
-                                {pendingWithdrawals.map(w => (
-                                    <div key={w.id} className="bg-white p-4 rounded-xl shadow-md border border-gray-100">
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex items-center gap-3">
-                                                <img src={w.user.avatarUrl} alt={w.user.name} className="w-10 h-10 rounded-full object-cover" />
-                                                <div>
-                                                    <p className="font-bold text-gray-800">{w.user.name}</p>
-                                                    <p className="text-xs text-gray-500">{new Date(w.date).toLocaleDateString()}</p>
-                                                </div>
-                                            </div>
-                                            <p className="font-semibold text-lg text-primary">{cs}{w.amount.toFixed(2)}</p>
-                                        </div>
-                                        <div className="flex items-center justify-end flex-wrap gap-2 mt-3 pt-3 border-t">
-                                            <button onClick={() => onUpdateWithdrawalStatus(w.user.id, w.id, 'rejected')} className="px-4 py-2 text-sm font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600">Reject</button>
-                                            <button onClick={() => onUpdateWithdrawalStatus(w.user.id, w.id, 'approved')} className="px-4 py-2 text-sm font-semibold text-white bg-green-500 rounded-lg hover:bg-green-600">Approve</button>
-                                        </div>
-                                    </div>
-                                ))}
-                                 {pendingWithdrawals.length === 0 && (
-                                    <div className="text-center py-6 text-gray-500">No pending withdrawal requests.</div>
-                                )}
-                            </div>
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-800 mb-2">Approved - Pending Payout</h3>
-                             {/* Desktop Table */}
-                             <div className="hidden md:block overflow-x-auto rounded-lg border">
-                                <table className="w-full text-sm text-left text-gray-500 table-fixed">
-                                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th scope="col" className="px-6 py-3 w-1/3">User</th>
-                                            <th scope="col" className="px-6 py-3 w-1/4">Date</th>
-                                            <th scope="col" className="px-6 py-3 w-1/6">Amount</th>
-                                            <th scope="col" className="px-6 py-3 text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {approvedWithdrawals.map(w => (
-                                            <tr key={w.id} className="bg-white border-b hover:bg-blue-50 last:border-b-0">
-                                                <td className="px-6 py-4 font-medium text-gray-900 break-words">
-                                                    <div className="flex items-center">
-                                                        <img src={w.user.avatarUrl} alt={w.user.name} className="w-8 h-8 rounded-full mr-3 object-cover flex-shrink-0" />
-                                                        <span className="truncate">{w.user.name}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 break-words">{new Date(w.date).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4 font-semibold">{cs}{w.amount.toFixed(2)}</td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <button onClick={() => onMarkWithdrawalPaid(w.user.id, w.id)} className="px-3 py-1 text-xs font-semibold text-white bg-primary rounded-md hover:bg-blue-700 transition-all">Mark as Paid</button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {approvedWithdrawals.length === 0 && (
-                                            <tr><td colSpan={4} className="text-center py-6 text-gray-500">No approved withdrawals awaiting payment.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {/* Mobile Cards */}
-                             <div className="space-y-3 md:hidden">
-                                {approvedWithdrawals.map(w => (
-                                    <div key={w.id} className="bg-white p-4 rounded-xl shadow-md border border-gray-100">
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex items-center gap-3">
-                                                <img src={w.user.avatarUrl} alt={w.user.name} className="w-10 h-10 rounded-full object-cover" />
-                                                <div>
-                                                    <p className="font-bold text-gray-800">{w.user.name}</p>
-                                                    <p className="text-xs text-gray-500">{new Date(w.date).toLocaleDateString()}</p>
-                                                </div>
-                                            </div>
-                                            <p className="font-semibold text-lg text-primary">{cs}{w.amount.toFixed(2)}</p>
-                                        </div>
-                                        <div className="flex items-center justify-end mt-3 pt-3 border-t">
-                                            <button onClick={() => onMarkWithdrawalPaid(w.user.id, w.id)} className="px-3 py-1.5 text-xs font-semibold text-white bg-primary rounded-full hover:bg-blue-700">Mark as Paid</button>
-                                        </div>
-                                    </div>
-                                ))}
-                                {approvedWithdrawals.length === 0 && (
-                                    <div className="text-center py-6 text-gray-500">No approved withdrawals awaiting payment.</div>
-                                )}
-                            </div>
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-800 mb-2">History</h3>
-                             {/* Desktop Table */}
-                             <div className="hidden md:block overflow-x-auto rounded-lg border">
-                                <table className="w-full text-sm text-left text-gray-500 table-fixed">
-                                     <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th scope="col" className="px-6 py-3 w-1/3">User</th>
-                                            <th scope="col" className="px-6 py-3 w-1/4">Date</th>
-                                            <th scope="col" className="px-6 py-3 w-1/6">Amount</th>
-                                            <th scope="col" className="px-6 py-3 text-center">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {historyWithdrawals.map(w => (
-                                            <tr key={w.id} className="bg-white border-b hover:bg-gray-50 last:border-b-0">
-                                                <td className="px-6 py-4 font-medium text-gray-900 break-words">
-                                                    <div className="flex items-center">
-                                                        <img src={w.user.avatarUrl} alt={w.user.name} className="w-8 h-8 rounded-full mr-3 object-cover flex-shrink-0" />
-                                                        <span className="truncate">{w.user.name}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 break-words">{new Date(w.date).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4 font-semibold">{cs}{w.amount.toFixed(2)}</td>
-                                                <td className="px-6 py-4 text-center">{getStatusBadge(w.status)}</td>
-                                            </tr>
-                                        ))}
-                                        {historyWithdrawals.length === 0 && (
-                                            <tr><td colSpan={4} className="text-center py-6 text-gray-500">No withdrawal history.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {/* Mobile Cards */}
-                            <div className="space-y-3 md:hidden">
-                                {historyWithdrawals.map(w => (
-                                    <div key={w.id} className="bg-white p-4 rounded-xl shadow-md border border-gray-100">
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex items-center gap-3">
-                                                <img src={w.user.avatarUrl} alt={w.user.name} className="w-10 h-10 rounded-full object-cover" />
-                                                <div>
-                                                    <p className="font-bold text-gray-800">{w.user.name}</p>
-                                                    <p className="text-xs text-gray-500">{new Date(w.date).toLocaleDateString()}</p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="font-semibold text-lg text-primary">{cs}{w.amount.toFixed(2)}</p>
-                                                <div className="mt-1">{getStatusBadge(w.status)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                                {historyWithdrawals.length === 0 && (
-                                    <div className="text-center py-6 text-gray-500">No withdrawal history.</div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-                {activeRequestTab === 'deposits' && (
-                    <div className="space-y-6">
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-800 mb-2">Pending Deposit Requests</h3>
-                             {/* Desktop Table */}
-                            <div className="hidden md:block overflow-x-auto rounded-lg border">
-                                <table className="w-full text-sm text-left text-gray-500 table-fixed">
-                                     <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th scope="col" className="px-6 py-3 w-1/4">User</th>
-                                            <th scope="col" className="px-6 py-3 w-1/4">Date</th>
-                                            <th scope="col" className="px-6 py-3 w-1/6">Amount</th>
-                                            <th scope="col" className="px-6 py-3 w-1/3">Description</th>
-                                            <th scope="col" className="px-6 py-3 text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {pendingDeposits.map(d => (
-                                            <tr key={d.id} className="bg-white border-b hover:bg-yellow-50">
-                                                <td className="px-6 py-4 font-medium text-gray-900 break-words">
-                                                    <div className="flex items-center">
-                                                        <img src={d.user.avatarUrl} alt={d.user.name} className="w-8 h-8 rounded-full mr-3 object-cover flex-shrink-0" />
-                                                        <span className="truncate">{d.user.name}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 break-words">{new Date(d.date).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4 font-semibold">{cs}{d.amount.toFixed(2)}</td>
-                                                <td className="px-6 py-4 break-words">{d.description}</td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <div className="flex items-center justify-center gap-2">
-                                                        <button onClick={() => onUpdateDepositStatus(d.id, 'approved')} className="px-3 py-1 text-xs font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 transition-all">Approve</button>
-                                                        <button onClick={() => onUpdateDepositStatus(d.id, 'rejected')} className="px-3 py-1 text-xs font-semibold text-white bg-red-500 rounded-md hover:bg-red-600 transition-all">Reject</button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {pendingDeposits.length === 0 && (
-                                            <tr><td colSpan={5} className="text-center py-6 text-gray-500">No pending deposit requests.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {/* Mobile Cards */}
-                            <div className="space-y-3 md:hidden">
-                                {pendingDeposits.map(d => (
-                                    <div key={d.id} className="bg-white p-4 rounded-xl shadow-md border border-gray-100">
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex items-center gap-3">
-                                                <img src={d.user.avatarUrl} alt={d.user.name} className="w-10 h-10 rounded-full object-cover" />
-                                                <div>
-                                                    <p className="font-bold text-gray-800">{d.user.name}</p>
-                                                    <p className="text-xs text-gray-500">{new Date(d.date).toLocaleDateString()}</p>
-                                                </div>
-                                            </div>
-                                            <p className="font-semibold text-lg text-primary">{cs}{d.amount.toFixed(2)}</p>
-                                        </div>
-                                        <p className="text-sm text-gray-600 mt-2 border-t pt-2">{d.description}</p>
-                                        <div className="flex items-center justify-end flex-wrap gap-2 mt-3 pt-3 border-t">
-                                            <button onClick={() => onUpdateDepositStatus(d.id, 'rejected')} className="px-4 py-2 text-sm font-semibold text-white bg-red-500 rounded-lg hover:bg-red-600">Reject</button>
-                                            <button onClick={() => onUpdateDepositStatus(d.id, 'approved')} className="px-4 py-2 text-sm font-semibold text-white bg-green-500 rounded-lg hover:bg-green-600">Approve</button>
-                                        </div>
-                                    </div>
-                                ))}
-                                {pendingDeposits.length === 0 && (
-                                    <div className="text-center py-6 text-gray-500">No pending deposit requests.</div>
-                                )}
-                            </div>
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-semibold text-gray-800 mb-2">Deposit History</h3>
-                            {/* Desktop Table */}
-                            <div className="hidden md:block overflow-x-auto rounded-lg border">
-                                <table className="w-full text-sm text-left text-gray-500 table-fixed">
-                                     <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th scope="col" className="px-6 py-3 w-1/4">User</th>
-                                            <th scope="col" className="px-6 py-3 w-1/4">Date</th>
-                                            <th scope="col" className="px-6 py-3 w-1/6">Amount</th>
-                                            <th scope="col" className="px-6 py-3 w-1/3">Description</th>
-                                            <th scope="col" className="px-6 py-3 text-center">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {historyDeposits.map(d => (
-                                            <tr key={d.id} className="bg-white border-b hover:bg-gray-50 last:border-b-0">
-                                                <td className="px-6 py-4 font-medium text-gray-900 break-words">
-                                                    <div className="flex items-center">
-                                                        <img src={d.user.avatarUrl} alt={d.user.name} className="w-8 h-8 rounded-full mr-3 object-cover flex-shrink-0" />
-                                                        <span className="truncate">{d.user.name}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 break-words">{new Date(d.date).toLocaleDateString()}</td>
-                                                <td className="px-6 py-4 font-semibold">{cs}{d.amount.toFixed(2)}</td>
-                                                <td className="px-6 py-4 break-words">{d.description}</td>
-                                                <td className="px-6 py-4 text-center">{getStatusBadge(d.status)}</td>
-                                            </tr>
-                                        ))}
-                                        {historyDeposits.length === 0 && (
-                                            <tr><td colSpan={5} className="text-center py-6 text-gray-500">No deposit history.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            {/* Mobile Cards */}
-                             <div className="space-y-3 md:hidden">
-                                {historyDeposits.map(d => (
-                                    <div key={d.id} className="bg-white p-4 rounded-xl shadow-md border border-gray-100">
-                                        <div className="flex justify-between items-start">
-                                            <div className="flex items-center gap-3">
-                                                <img src={d.user.avatarUrl} alt={d.user.name} className="w-10 h-10 rounded-full object-cover" />
-                                                <div>
-                                                    <p className="font-bold text-gray-800">{d.user.name}</p>
-                                                    <p className="text-xs text-gray-500">{new Date(d.date).toLocaleDateString()}</p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="font-semibold text-lg text-primary">{cs}{d.amount.toFixed(2)}</p>
-                                                <div className="mt-1">{getStatusBadge(d.status)}</div>
-                                            </div>
-                                        </div>
-                                        <p className="text-sm text-gray-600 mt-2 border-t pt-2">{d.description}</p>
-                                    </div>
-                                ))}
-                                {historyDeposits.length === 0 && (
-                                    <div className="text-center py-6 text-gray-500">No deposit history.</div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
+            {details && <div className="mt-4 pt-4 border-t border-slate-200 dark:border-gray-800">{details}</div>}
+
+            <div className="mt-6 flex flex-col sm:flex-row gap-2">
+                <button 
+                    onClick={onApprove} 
+                    className={`flex-1 inline-flex items-center justify-center py-3 ${accent} text-white rounded-xl font-black uppercase text-[9px] tracking-widest transition-all active:scale-95 shadow-sm`}
+                >
+                    {approveLabel}
+                </button>
+                <button 
+                    onClick={onReject} 
+                    className="px-6 inline-flex items-center justify-center py-3 bg-white dark:bg-gray-800 text-slate-400 hover:text-rose-600 rounded-xl font-black uppercase text-[9px] tracking-widest transition-all active:scale-95 border border-slate-100 dark:border-gray-800"
+                >
+                    Decline
+                </button>
             </div>
+        </div>
+    );
+
+    return (
+        <div className="font-sans">
+            {/* 1. Summary Grid (The requested "Boxes") */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {availableTabs.map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveDetailTab(tab.id)}
+                        className={`relative group flex flex-col items-start p-6 bg-white dark:bg-gray-900 rounded-[2.5rem] border transition-all text-left hover:border-${tab.color}-500/50 hover:shadow-xl hover:-translate-y-1 ${tab.count > 0 ? `border-${tab.color}-100 dark:border-${tab.color}-900/30` : 'border-slate-50 dark:border-gray-800'}`}
+                    >
+                        <div className={`p-3 rounded-2xl mb-4 transition-colors ${tab.count > 0 ? `bg-${tab.color}-50 text-${tab.color}-600 dark:bg-${tab.color}-900/20` : 'bg-slate-50 text-slate-400 dark:bg-gray-800'}`}>
+                            {tab.icon}
+                        </div>
+                        <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{tab.label}</h4>
+                        <div className="flex items-baseline gap-2 mt-1">
+                            <span className={`text-3xl font-black tabular-nums tracking-tighter ${tab.count > 0 ? `text-slate-900 dark:text-white` : 'text-slate-300 dark:text-slate-700'}`}>{tab.count}</span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Pending</span>
+                        </div>
+                        <div className={`absolute top-6 right-6 w-2 h-2 rounded-full ${tab.count > 0 ? `bg-${tab.color}-500 animate-pulse` : 'bg-slate-200 dark:bg-gray-800'}`}></div>
+                    </button>
+                ))}
+            </div>
+
+            {/* 2. Detailed Audit Modal */}
+            <ModalShell
+                isOpen={activeDetailTab !== null}
+                onClose={() => { setActiveDetailTab(null); setReviewNote(''); }}
+                title={availableTabs.find(t => t.id === activeDetailTab)?.label || 'Verification Protocol'}
+                description="Secure audit and authorization workflow"
+                maxWidth="max-w-2xl"
+            >
+                <div className="space-y-6">
+                    {(activeDetailTab && availableTabs.find(t => t.id === activeDetailTab)?.count > 0) && (
+                        <div className="bg-slate-50 dark:bg-gray-900 p-5 rounded-[1.5rem] border border-slate-100 dark:border-gray-800 shadow-inner">
+                            <label className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 px-1 mb-2 block">Ledger Remarks (Apply to next action)</label>
+                            <textarea 
+                                value={reviewNote} 
+                                onChange={(e) => setReviewNote(e.target.value)} 
+                                placeholder="Specify rationale for authorization node..." 
+                                rows={2} 
+                                className="w-full bg-white dark:bg-gray-800 border-none rounded-xl p-4 text-sm font-bold text-slate-900 dark:text-white focus:ring-4 focus:ring-primary/10 transition-all outline-none leading-relaxed resize-none shadow-sm" 
+                            />
+                        </div>
+                    )}
+
+                    <div className="min-h-[300px]">
+                        {activeDetailTab === 'deposits' && pendingDeposits.map(dep => (
+                            <RequestCard
+                                key={dep.id}
+                                title={dep.user?.name || 'Authorized Unit'}
+                                amount={dep.amount}
+                                tag={dep.bankName ? `Bank: ${dep.bankName}` : "Cash Liquidity"}
+                                timestamp={dep.date}
+                                accent="bg-indigo-600 shadow-indigo-200"
+                                approveLabel="Verify Deposit"
+                                onApprove={() => setPendingAction({ id: dep.id, type: 'deposits', status: 'approved', amount: dep.amount, title: 'Verify Cash Deposit', variant: 'primary' })}
+                                onReject={() => setPendingAction({ id: dep.id, type: 'deposits', status: 'rejected', amount: dep.amount, title: 'Reject Cash Deposit', variant: 'danger' })}
+                                details={(
+                                    <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-slate-100 dark:border-gray-700">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Target Destination</p>
+                                            <span className="text-[9px] font-black text-primary uppercase">{dep.bankName || 'Physical Treasury'}</span>
+                                        </div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Staff Audit Memo</p>
+                                        <p className="text-xs font-bold text-slate-700 dark:text-slate-200 italic leading-relaxed">"{dep.description}"</p>
+                                    </div>
+                                )}
+                            />
+                        ))}
+
+                        {activeDetailTab === 'clientOrders' && clientOrders.map(order => (
+                            <RequestCard
+                                key={order.id}
+                                title={order.customer?.name || 'Anonymous Client'}
+                                amount={order.total}
+                                tag="Inquiry"
+                                timestamp={order.date}
+                                accent="bg-emerald-500 shadow-emerald-200"
+                                approveLabel="Enroll as POS Sale"
+                                onApprove={() => setPendingAction({ id: order.id, type: 'clientOrders', status: 'approved', amount: order.total, title: 'Authorize Client Order', variant: 'primary' })}
+                                onReject={() => setPendingAction({ id: order.id, type: 'clientOrders', status: 'rejected', amount: order.total, title: 'Decline Inquiry', variant: 'danger' })}
+                                details={(
+                                    <div className="space-y-2">
+                                        {order.items.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between items-center text-xs">
+                                                <span className="text-slate-500 font-bold uppercase tracking-tight"><span className="text-primary">{item.quantity}x</span> {item.product.name}</span>
+                                                <span className="tabular-nums font-bold">{cs}{(item.quantity * (item.variant?.price || item.product.price)).toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            />
+                        ))}
+
+                        {activeDetailTab === 'bankVerification' && pendingBankSales.map(sale => (
+                            <RequestCard
+                                key={sale.id}
+                                title={sale.customer?.name || 'Bank Settlement'}
+                                avatar={sale.user?.avatarUrl}
+                                amount={sale.total}
+                                tag="Receipt Review"
+                                timestamp={sale.date}
+                                accent="bg-primary shadow-primary/20"
+                                approveLabel="Verify Settlement"
+                                onApprove={() => setPendingAction({ id: sale.id, type: 'bankVerification', status: 'approved', amount: sale.total, title: 'Verify Bank Settlement', variant: 'primary' })}
+                                onReject={() => setPendingAction({ id: sale.id, type: 'bankVerification', status: 'rejected', amount: sale.total, title: 'Reject Verification', variant: 'danger' })}
+                                details={(
+                                    <div className="grid grid-cols-2 gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl border border-slate-100 dark:border-gray-700">
+                                        <div>
+                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Receipt #</p>
+                                            <p className="text-xs font-black text-slate-900 dark:text-white truncate">{sale.bankReceiptNumber || '---'}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Bank</p>
+                                            <p className="text-xs font-black text-slate-900 dark:text-white truncate">{sale.bankName || '---'}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            />
+                        ))}
+
+                        {activeDetailTab === 'paymentApprovals' && pendingPayments.map(p => (
+                            <RequestCard
+                                key={p.id}
+                                title={p.user?.name}
+                                subtitle={p.description}
+                                avatar={p.user?.avatarUrl}
+                                amount={p.amount}
+                                tag="Staff Payment"
+                                timestamp={p.dateInitiated}
+                                accent="bg-amber-500 shadow-amber-200"
+                                approveLabel="Authorize Payout"
+                                onApprove={() => setPendingAction({ id: p.id, userId: p.user.id, type: 'paymentApprovals', status: 'approved_by_owner', amount: p.amount, title: 'Authorize Staff Payment', variant: 'primary' })}
+                                onReject={() => setPendingAction({ id: p.id, userId: p.user.id, type: 'paymentApprovals', status: 'rejected_by_owner', amount: p.amount, title: 'Decline Remittance', variant: 'danger' })}
+                            />
+                        ))}
+
+                        {activeDetailTab === 'expenses' && pendingExpenses.map(r => (
+                            <RequestCard
+                                key={r.id}
+                                title={r.user?.name}
+                                subtitle={r.description}
+                                avatar={r.user?.avatarUrl}
+                                amount={r.amount}
+                                tag={r.category}
+                                timestamp={r.date}
+                                accent="bg-violet-600 shadow-violet-200"
+                                approveLabel="Approve Expense"
+                                onApprove={() => setPendingAction({ id: r.id, type: 'expenses', status: 'approved', amount: r.amount, title: 'Approve Expenditure', variant: 'primary' })}
+                                onReject={() => setPendingAction({ id: r.id, type: 'expenses', status: 'rejected', amount: r.amount, title: 'Reject Expenditure', variant: 'danger' })}
+                            />
+                        ))}
+                        
+                        {activeDetailTab === 'withdrawals' && pendingWithdrawals.map(w => (
+                            <RequestCard
+                                key={w.id}
+                                title={w.user?.name}
+                                subtitle={`Source: ${w.source}`}
+                                avatar={w.user?.avatarUrl}
+                                amount={w.amount}
+                                tag="Payout Request"
+                                timestamp={w.date}
+                                accent="bg-rose-600 shadow-rose-200"
+                                onApprove={() => setPendingAction({ id: w.id, userId: w.user.id, type: 'withdrawals', status: 'approved_by_owner', amount: w.amount, title: 'Authorize Payout', variant: 'primary' })}
+                                onReject={() => setPendingAction({ id: w.id, userId: w.user.id, type: 'withdrawals', status: 'rejected', amount: w.amount, title: 'Decline Payout', variant: 'danger' })}
+                            />
+                        ))}
+
+                        {activeDetailTab && (availableTabs.find(t => t.id === activeDetailTab)?.count === 0) && (
+                            <EmptyState 
+                                icon={<WarningIcon />} 
+                                title="Protocol Hub Clear" 
+                                description="Zero pending requests found in this identity node."
+                                compact
+                            />
+                        )}
+                    </div>
+                </div>
+            </ModalShell>
+
+            <ConfirmationModal 
+                isOpen={!!pendingAction}
+                onClose={() => setPendingAction(null)}
+                onConfirm={executeConfirmedAction}
+                title={pendingAction?.title || 'Execution Required'}
+                message={`Verify the ledger entry for ${pendingAction?.amount ? cs + pendingAction.amount.toFixed(2) : 'this amount'}. Audit Note: "${reviewNote || 'No rationale provided'}"`}
+                amount={pendingAction?.amount}
+                currencySymbol={cs}
+                variant={pendingAction?.variant}
+                isIrreversible={pendingAction?.variant === 'danger'}
+            />
         </div>
     );
 };

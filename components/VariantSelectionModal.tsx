@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Product, ProductVariant, ReceiptSettingsData } from '../types';
 import { formatCurrency } from '../lib/utils';
-import { CloseIcon } from '../constants';
+import ModalShell from './ModalShell';
 
 interface VariantSelectionModalProps {
     isOpen: boolean;
@@ -43,9 +44,7 @@ const VariantSelectionModal: React.FC<VariantSelectionModalProps> = ({ isOpen, o
 
     const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
-        if (val === '' || /^[0-9]+$/.test(val)) {
-            setQuantity(val);
-        }
+        if (val === '' || /^[0-9]+$/.test(val)) setQuantity(val);
     };
     
     const handleBlur = () => {
@@ -54,78 +53,94 @@ const VariantSelectionModal: React.FC<VariantSelectionModalProps> = ({ isOpen, o
         setQuantity(Math.max(1, Math.min(selectedVariant.stock, num)));
     };
     
-    if (!isOpen || !product) return null;
+    const footer = (
+        <button 
+            onClick={handleConfirmClick} 
+            className="btn-base btn-primary w-full py-5 text-sm disabled:bg-slate-200 disabled:text-slate-400"
+            disabled={!selectedVariant || selectedVariant.stock === 0}
+        >
+            {!selectedVariant ? 'Select Attributes' : selectedVariant.stock === 0 ? 'Protocol: Stock Null' : 'Synchronize Variant'}
+        </button>
+    );
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onClose} role="dialog" aria-modal="true">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-                <header className="p-4 border-b flex justify-between items-center">
-                    <h3 className="text-lg font-bold text-gray-800 truncate">{product.name}</h3>
-                    <button onClick={onClose} className="p-1 rounded-full text-gray-500 hover:bg-gray-100" aria-label="Close">
-                        <CloseIcon />
-                    </button>
-                </header>
-                <main className="p-6 space-y-4">
-                    {product.variantOptions?.map(option => (
-                        <div key={option.name}>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">{option.name}</label>
-                            <div className="flex flex-wrap gap-2">
-                                {option.values.map(value => (
-                                    <button
-                                        key={value}
-                                        onClick={() => handleOptionSelect(option.name, value)}
-                                        className={`px-4 py-2 text-sm font-semibold rounded-full border-2 transition-colors ${
-                                            selectedOptions[option.name] === value
-                                                ? 'bg-primary border-primary text-white'
-                                                : 'bg-white border-gray-300 text-gray-700 hover:border-primary'
-                                        }`}
-                                    >
-                                        {value}
-                                    </button>
-                                ))}
-                            </div>
+        <ModalShell 
+            isOpen={isOpen} 
+            onClose={onClose} 
+            title={product?.name || 'Configure Variant'} 
+            description="Multi-Attribute Selection Protocol"
+            maxWidth="max-w-md"
+            footer={footer}
+        >
+            <div className="space-y-10">
+                {product?.variantOptions?.map(option => (
+                    <div key={option.name}>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4 block px-1">{option.name}</label>
+                        <div className="flex flex-wrap gap-3">
+                            {option.values.map(value => (
+                                <button
+                                    key={value}
+                                    onClick={() => handleOptionSelect(option.name, value)}
+                                    className={`px-6 py-3 text-xs font-black uppercase tracking-widest rounded-2xl border-2 transition-all active:scale-95 ${
+                                        selectedOptions[option.name] === value
+                                            ? 'bg-primary/5 border-primary text-primary shadow-inner'
+                                            : 'bg-white dark:bg-gray-900 border-slate-100 dark:border-gray-800 text-slate-500 hover:border-primary/40'
+                                    }`}
+                                >
+                                    {value}
+                                </button>
+                            ))}
                         </div>
-                    ))}
-                    
-                    {selectedVariant && (
-                        <div className="pt-4 border-t mt-4 space-y-4">
-                             <div className="flex items-center justify-between">
-                                <span className="text-2xl font-bold text-primary">{formatCurrency(selectedVariant.price, receiptSettings.currencySymbol)}</span>
-                                <span className={`text-sm font-semibold ${selectedVariant.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {selectedVariant.stock > 0 ? `${selectedVariant.stock} in stock` : 'Out of Stock'}
-                                </span>
-                            </div>
+                    </div>
+                ))}
+                
+                {selectedVariant && (
+                    <div className="pt-8 border-t dark:border-gray-800 animate-fade-in">
+                        <div className="flex items-center justify-between mb-8 p-6 bg-slate-50 dark:bg-gray-900 rounded-3xl border border-slate-100 dark:border-gray-800 shadow-inner">
                             <div>
-                                <label htmlFor="quantity-input" className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-                                <div className="flex items-center justify-center gap-2">
-                                    <button onClick={() => setQuantity(q => Math.max(1, (Number(q) || 1) - 1))} className="w-10 h-10 rounded-full border text-xl font-bold text-primary hover:bg-gray-100 disabled:opacity-50" disabled={Number(quantity) <= 1}>-</button>
-                                    <input
-                                        id="quantity-input"
-                                        type="number"
-                                        value={quantity}
-                                        onChange={handleQuantityChange}
-                                        onBlur={handleBlur}
-                                        className="w-20 h-10 text-center text-lg font-bold border-gray-300 rounded-lg"
-                                        min="1"
-                                        max={selectedVariant.stock}
-                                    />
-                                    <button onClick={() => setQuantity(q => Math.min(selectedVariant.stock, (Number(q) || 0) + 1))} className="w-10 h-10 rounded-full border text-xl font-bold text-primary hover:bg-gray-100 disabled:opacity-50" disabled={Number(quantity) >= selectedVariant.stock}>+</button>
-                                </div>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Protocol Value</p>
+                                <p className="text-3xl font-black text-primary tabular-nums mt-1">{formatCurrency(selectedVariant.price, receiptSettings.currencySymbol)}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Availability</p>
+                                <p className={`text-xl font-black uppercase tabular-nums mt-1 ${selectedVariant.stock > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {selectedVariant.stock > 0 ? `${selectedVariant.stock} Units` : 'Null'}
+                                </p>
                             </div>
                         </div>
-                    )}
-                </main>
-                <footer className="p-4 bg-gray-50 rounded-b-2xl">
-                    <button 
-                        onClick={handleConfirmClick} 
-                        className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        disabled={!selectedVariant || selectedVariant.stock === 0}
-                    >
-                        {!selectedVariant ? 'Please select options' : selectedVariant.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
-                    </button>
-                </footer>
+                        <div className="space-y-4">
+                            <label htmlFor="quantity-input" className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1 block">Quantity</label>
+                            <div className="flex items-center justify-center gap-4 bg-slate-50 dark:bg-gray-900 rounded-[2rem] p-4 border border-slate-100 dark:border-gray-800">
+                                <button 
+                                    onClick={() => setQuantity(q => Math.max(1, (Number(q) || 1) - 1))} 
+                                    className="w-14 h-14 rounded-2xl border-2 border-white dark:border-gray-800 text-2xl font-black text-slate-400 hover:bg-white dark:hover:bg-gray-800 transition-all active:scale-90" 
+                                    disabled={Number(quantity) <= 1}
+                                >
+                                    -
+                                </button>
+                                <input
+                                    id="quantity-input"
+                                    type="number"
+                                    value={quantity}
+                                    onChange={handleQuantityChange}
+                                    onBlur={handleBlur}
+                                    onFocus={(e) => e.target.select()}
+                                    className="w-24 h-14 text-center text-2xl font-black bg-transparent border-none outline-none tabular-nums focus:ring-0"
+                                    min="1"
+                                />
+                                <button 
+                                    onClick={() => setQuantity(q => Math.min(selectedVariant.stock, (Number(q) || 0) + 1))} 
+                                    className="w-14 h-14 rounded-2xl border-2 border-white dark:border-gray-800 text-2xl font-black text-slate-400 hover:bg-white dark:hover:bg-gray-800 transition-all active:scale-90" 
+                                    disabled={Number(quantity) >= selectedVariant.stock}
+                                >
+                                    +
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
-        </div>
+        </ModalShell>
     );
 };
 

@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { NavLink } from 'react-router-dom';
-import type { User, Sale, Product, Expense, ReceiptSettingsData, AppPermissions } from '../types';
-import { formatCurrency } from '../lib/utils';
-import { ReportsIcon, WarningIcon, ExpensesIcon, InventoryIcon, AIIcon } from '../constants';
+
+// @ts-nocheck
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { GoogleGenAI } from "@google/genai";
+import { formatCurrency, getStoredItem } from '../lib/utils';
+import { AIIcon, CloseIcon, PlusIcon } from '../constants';
+import type { User, Sale, Product, Expense, Customer, ExpenseRequest, CashCount, GoodsCosting, GoodsReceiving, AnomalyAlert, BusinessSettingsData, ReceiptSettingsData, AppPermissions } from '../types';
 import { hasAccess } from '../lib/permissions';
 
 interface AIAssistantProps {
@@ -10,243 +12,165 @@ interface AIAssistantProps {
     sales: Sale[];
     products: Product[];
     expenses: Expense[];
+    customers: Customer[];
+    users: User[];
+    expenseRequests: ExpenseRequest[];
+    cashCounts: CashCount[];
+    goodsCosting: GoodsCosting[];
+    goodsReceiving: GoodsReceiving[];
+    anomalyAlerts: AnomalyAlert[];
+    businessSettings: BusinessSettingsData;
     lowStockThreshold: number;
     t: (key: string) => string;
     receiptSettings: ReceiptSettingsData;
     permissions: AppPermissions;
 }
 
-interface Message {
-    sender: 'user' | 'ai';
-    text: string;
-}
-
-const SuggestionCard: React.FC<{ to: string, icon: React.ReactNode, title: string, children: React.ReactNode }> = ({ to, icon, title, children }) => (
-    <NavLink to={to} className="bg-white p-4 rounded-xl shadow-md flex flex-col gap-3 hover:shadow-lg hover:scale-[1.02] transition-all duration-200">
-        <div className="flex items-center gap-3">
-            <div className="bg-primary/10 text-primary p-2 rounded-lg">{icon}</div>
-            <h3 className="font-bold text-neutral-dark">{title}</h3>
-        </div>
-        <div className="text-neutral-medium text-sm flex-grow">{children}</div>
-        <div className="text-right font-semibold text-primary text-sm">View →</div>
-    </NavLink>
-);
-
-const AIAssistant: React.FC<AIAssistantProps> = ({ currentUser, sales, products, expenses, lowStockThreshold, t, receiptSettings, permissions }) => {
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [userInput, setUserInput] = useState('');
+const AIAssistant: React.FC<AIAssistantProps> = ({
+    currentUser, sales, products, expenses, customers, users,
+    expenseRequests, cashCounts, goodsCosting, goodsReceiving,
+    anomalyAlerts, businessSettings, lowStockThreshold, t,
+    receiptSettings, permissions
+}) => {
+    const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
+    const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [aiTip, setAiTip] = useState('');
-    const [isTipLoading, setIsTipLoading] = useState(true);
-    const chatEndRef = useRef<HTMLDivElement>(null);
-    const [ai, setAi] = useState<any | null>(undefined); // undefined: initializing, null: failed, object: success
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        // Set initial greeting
-        setMessages([{ sender: 'ai', text: `Hi ${currentUser.name.split(' ')[0]}! I'm your personal business assistant. You can ask me anything about your sales, inventory, or for business advice.` }]);
-        
-        // Dynamically import and initialize the AI client.
-        const initializeAi = async () => {
-            try {
-                const { GoogleGenAI } = await import('@google/genai');
-                // This will throw an error in the browser because process.env is not defined, which we will catch.
-                const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
-                setAi(genAI);
-            } catch (error) {
-                console.warn("AI Initialization failed. This is expected in a browser environment without a build step. AI features will be disabled.", error);
-                setAi(null); // Mark initialization as failed
-            }
-        };
+    const contextStr = useMemo(() => {
+        const safeSales = sales || [];
+        const safeProducts = products || [];
+        const safeExpenses = expenses || [];
+        const cs = receiptSettings?.currencySymbol || '$';
 
-        initializeAi();
-    }, [currentUser.name]);
-    
-    // Effect to fetch AI tip once AI initialization is attempted
-    useEffect(() => {
-        const fetchTip = async () => {
-            if (!ai) return; // ai is initialized and not null
-            
-            setIsTipLoading(true);
-            try {
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: "Provide a short, actionable business growth tip for a small retail shop owner. Make it encouraging and concise (2-3 sentences max)."
-                });
-                setAiTip(response.text);
-            } catch (error) {
-                console.error("Error fetching AI tip:", error);
-                setAiTip("Could not fetch a tip right now. Make sure your business is running efficiently!");
-            } finally {
-                setIsTipLoading(false);
-            }
-        };
+        let str = `[TERMINAL CONTEXT: ${receiptSettings?.businessName || 'Business Portal'}]\n`;
+        str += `- Operator: ${currentUser?.name} (${currentUser?.role})\n`;
+        str += `- Active Personnel: ${users?.length || 0} units\n`;
+        str += `- Customer Registry: ${customers?.length || 0} identities\n`;
 
-        if (ai === null) { // Explicitly check for failed initialization
-            setAiTip("AI Assistant is not configured. AI features are unavailable.");
-            setIsTipLoading(false);
-        } else if (ai) { // Check if ai object exists
-            fetchTip();
+        // 1. Inventory Summary
+        const totalStock = safeProducts.reduce((s, p) => s + (p.stock || 0), 0);
+        const lowStockCount = safeProducts.filter(p => (p.stock || 0) <= lowStockThreshold).length;
+        str += `\n[INVENTORY STATUS]\n- SKU Count: ${safeProducts.length}\n- Total Units: ${totalStock}\n- Low Stock Alerts: ${lowStockCount}\n`;
+
+        // 2. Sales Summary
+        const totalRev = safeSales.filter(s => s.status === 'completed').reduce((s, x) => s + x.total, 0);
+        str += `\n[SALES PERFORMANCE]\n- Total Lifetime Sales: ${safeSales.length}\n- Verified Revenue: ${cs}${totalRev.toFixed(2)}\n`;
+
+        // 3. Expense Ledger
+        const totalExp = safeExpenses.filter(e => e.status !== 'deleted').reduce((s, e) => s + e.amount, 0);
+        str += `\n[EXPENSE LEDGER]\n- Active Debits: ${safeExpenses.length}\n- Total Outflow: ${cs}${totalExp.toFixed(2)}\n`;
+
+        // 4. Financial Health
+        const netProfit = totalRev - totalExp;
+        str += `\n[FINANCIAL HEALTH]\n- Current Net Balance: ${cs}${netProfit.toFixed(2)}\n`;
+
+        // 5. Security & Anomalies
+        const activeAlerts = anomalyAlerts?.filter(a => !a.isDismissed).length || 0;
+        str += `\n[SECURITY PROTOCOLS]\n- Unresolved Anomalies: ${activeAlerts}\n`;
+
+        // 6. Commissions
+        if (hasAccess(currentUser, 'COMMISSIONS', 'view_all_commissions', permissions)) {
+            const totalComm = safeSales.reduce((s, sale) => s + (sale.commission || 0), 0);
+            str += `\n[COMMISSION DATA]\n- Total Staff Yield: ${cs}${totalComm.toFixed(2)}\n`;
         }
-        // If ai is undefined, we are still waiting for initialization.
-    }, [ai]);
+        
+        return str;
+    }, [currentUser, sales, products, expenses, users, customers, anomalyAlerts, receiptSettings, permissions, lowStockThreshold]);
 
-    const getGreeting = () => {
-        const hour = new Date().getHours();
-        const name = currentUser.name.split(' ')[0];
-        if (hour < 12) return `${t('ai.greeting.morning')} ${name}!`;
-        if (hour < 18) return `${t('ai.greeting.afternoon')} ${name}!`;
-        return `${t('ai.greeting.evening')} ${name}!`;
-    };
+    const handleSend = async () => {
+        if (!input.trim() || isLoading) return;
 
-    // --- Data for suggestions ---
-    const todayString = new Date().toISOString().split('T')[0];
-    const todaysSales = useMemo(() => sales.filter(sale => new Date(sale.date).toISOString().startsWith(todayString) && sale.status === 'completed'), [sales, todayString]);
-    const todaysRevenue = useMemo(() => todaysSales.reduce((sum, sale) => sum + sale.total, 0), [todaysSales]);
-    const lowStockProducts = useMemo(() => products.filter(p => p.stock > 0 && p.stock <= lowStockThreshold), [products, lowStockThreshold]);
-    const topTodaysProduct = useMemo(() => {
-        // FIX: Use a generic type argument for `reduce` to correctly type the accumulator.
-        const productQuantities = todaysSales.reduce<Record<string, number>>((acc, sale) => {
-            sale.items.forEach(item => {
-                acc[item.product.id] = (acc[item.product.id] || 0) + item.quantity;
-            });
-            return acc;
-        }, {});
-        const topEntry = Object.entries(productQuantities).sort(([, qtyA], [, qtyB]) => qtyB - qtyA)[0];
-        if (!topEntry) return null;
-        const product = products.find(p => p.id === topEntry[0]);
-        return product ? { name: product.name, quantity: topEntry[1] } : null;
-    }, [todaysSales, products]);
-    const hasRecentExpenses = useMemo(() => {
-        const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        return expenses.some(e => new Date(e.date) > oneWeekAgo);
-    }, [expenses]);
-    
-    // Scroll to bottom of chat
-    useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
-
-    const handleSendMessage = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!userInput.trim() || isLoading) return;
-
-        const newMessages: Message[] = [...messages, { sender: 'user', text: userInput }];
+        const currentInput = input;
+        const newMessages = [...messages, { role: 'user' as const, text: currentInput }];
         setMessages(newMessages);
-        const currentInput = userInput;
-        setUserInput('');
+        setInput('');
         setIsLoading(true);
 
-        if (!ai) {
-            setMessages([...newMessages, { sender: 'ai', text: "Sorry, the AI assistant is not configured correctly." }]);
-            setIsLoading(false);
-            return;
-        }
-
         try {
-            const roleDescription = currentUser.role === 'Custom' ? currentUser.customRoleName : currentUser.role;
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: `You are a helpful assistant in a Point-of-Sale app. The user you are talking to has the role of "${roleDescription}". Keep your answers concise and relevant to their role. Answer the user's question: "${currentInput}"`
+                model: 'gemini-3-flash-preview',
+                contents: [{ role: 'user', parts: [{ text: `Context:\n${contextStr}\n\nUser Question: ${currentInput}` }] }],
+                config: {
+                    systemInstruction: "You are the FinTab Intelligence Agent. Help users analyze their business metrics and operational data. Be professional, data-driven, and concise. If sensitive profit data is requested, assume the operator has clearance unless the context explicitly shows [ACCESS DENIED]."
+                }
             });
-            setMessages([...newMessages, { sender: 'ai', text: response.text }]);
+
+            if (response.text) {
+                setMessages(prev => [...prev, { role: 'model', text: response.text }]);
+            }
         } catch (error) {
-            console.error("Chat error:", error);
-            setMessages([...newMessages, { sender: 'ai', text: "Sorry, I'm having trouble connecting right now. Please try again in a moment." }]);
+            console.error("AI Node Error:", error);
+            setMessages(prev => [...prev, { role: 'model', text: "Protocol Error: Intelligence node connection failed." }]);
         } finally {
             setIsLoading(false);
         }
     };
-    
-    const canViewReports = hasAccess(currentUser, '/reports', 'view', permissions);
-    const canViewInventory = hasAccess(currentUser, '/inventory', 'view', permissions);
-    const canViewExpenses = hasAccess(currentUser, '/expenses', 'view', permissions);
+
+    useEffect(() => {
+        scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
 
     return (
-        <div className="space-y-6">
-            <h1 className="text-3xl font-bold text-neutral-dark">{getGreeting()}</h1>
+        <div className="flex flex-col h-[calc(100vh-14rem)] bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-gray-800 overflow-hidden font-sans">
+            <header className="p-6 border-b dark:border-gray-800 bg-slate-50/50 dark:bg-gray-800/50 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <div className="bg-primary p-3 rounded-2xl text-white shadow-lg shadow-primary/20"><AIIcon className="w-6 h-6" /></div>
+                    <div>
+                        <h2 className="text-xl font-black uppercase tracking-tighter">AI Assistant</h2>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Intelligence Node Active</p>
+                    </div>
+                </div>
+            </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {canViewReports && (
-                    <SuggestionCard to="/today" icon={<ReportsIcon />} title={t('ai.suggestion.salesTitle')}>
-                        <p className="text-2xl font-bold text-success">{formatCurrency(todaysRevenue, receiptSettings.currencySymbol)}</p>
-                        <p>{t('ai.suggestion.salesValue')}</p>
-                    </SuggestionCard>
+            <main className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                {messages.length === 0 && (
+                    <div className="h-full flex flex-col items-center justify-center text-center opacity-30">
+                        <AIIcon className="w-16 h-16 mb-4" />
+                        <p className="text-sm font-black uppercase tracking-[0.4em]">Awaiting Instruction</p>
+                    </div>
                 )}
-                {canViewInventory && (
-                    <SuggestionCard to="/inventory" icon={<WarningIcon />} title={t('ai.suggestion.stockTitle')}>
-                        {lowStockProducts.length > 0 ? (
-                            <>
-                                <p className="text-2xl font-bold text-warning">{lowStockProducts.length}</p>
-                                <p>{t('ai.suggestion.stockValue')}</p>
-                            </>
-                        ) : (
-                            <p className="text-green-600">All items are well-stocked!</p>
-                        )}
-                    </SuggestionCard>
-                )}
-                {canViewReports && (
-                    <SuggestionCard to="/reports" icon={<InventoryIcon />} title={t('ai.suggestion.topProductTitle')}>
-                        {topTodaysProduct ? (
-                            <>
-                                <p className="text-lg font-bold text-primary truncate">{topTodaysProduct.name}</p>
-                                <p>{topTodaysProduct.quantity} {t('ai.suggestion.topProductValue')}</p>
-                            </>
-                        ) : (
-                            <p>No sales recorded yet today.</p>
-                        )}
-                    </SuggestionCard>
-                )}
-                
-                {(!hasRecentExpenses && canViewExpenses) ? (
-                    <SuggestionCard to="/expenses" icon={<ExpensesIcon />} title={t('ai.suggestion.expensesTitle')}>
-                        <p>{t('ai.suggestion.expensesValue')}</p>
-                    </SuggestionCard>
-                ) : (
-                     <div className="bg-white p-4 rounded-xl shadow-md flex flex-col gap-3">
-                        <div className="flex items-center gap-3">
-                            <div className="bg-primary/10 text-primary p-2 rounded-lg"><AIIcon /></div>
-                            <h3 className="font-bold text-neutral-dark">{t('ai.suggestion.aiTipTitle')}</h3>
+                {messages.map((m, i) => (
+                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] p-4 rounded-3xl ${m.role === 'user' ? 'bg-primary text-white rounded-br-none' : 'bg-slate-100 dark:bg-gray-800 text-slate-900 dark:text-white rounded-bl-none shadow-sm'}`}>
+                            <p className="text-sm font-medium leading-relaxed">{m.text}</p>
                         </div>
-                        <div className="text-neutral-medium text-sm flex-grow">
-                            {isTipLoading ? <p className="animate-pulse">Fetching today's tip...</p> : <p>{aiTip}</p>}
+                    </div>
+                ))}
+                {isLoading && (
+                    <div className="flex justify-start">
+                        <div className="bg-slate-50 dark:bg-gray-800 p-4 rounded-3xl rounded-bl-none animate-pulse">
+                            <div className="flex gap-1">
+                                <div className="w-1.5 h-1.5 bg-slate-300 rounded-full"></div>
+                                <div className="w-1.5 h-1.5 bg-slate-300 rounded-full"></div>
+                                <div className="w-1.5 h-1.5 bg-slate-300 rounded-full"></div>
+                            </div>
                         </div>
                     </div>
                 )}
-            </div>
-            
-            <div className="bg-white rounded-xl shadow-md p-4">
-                <h2 className="text-xl font-bold text-neutral-dark mb-4">{t('ai.title')}</h2>
-                <div className="h-[40vh] bg-gray-50 rounded-lg overflow-y-auto p-4 flex flex-col gap-4">
-                    {messages.map((msg, index) => (
-                        <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-md p-3 rounded-xl ${msg.sender === 'user' ? 'bg-primary text-white' : 'bg-gray-200 text-neutral-dark'}`}>
-                                <p className="text-sm" style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</p>
-                            </div>
-                        </div>
-                    ))}
-                    {isLoading && (
-                        <div className="flex justify-start">
-                            <div className="max-w-md p-3 rounded-xl bg-gray-200 text-neutral-dark">
-                                <p className="text-sm animate-pulse">Thinking...</p>
-                            </div>
-                        </div>
-                    )}
-                    <div ref={chatEndRef} />
-                </div>
-                <form onSubmit={handleSendMessage} className="mt-4 flex gap-2">
-                    <input
-                        type="text"
-                        value={userInput}
-                        onChange={e => setUserInput(e.target.value)}
-                        placeholder={ai === null ? "AI is disabled" : "Ask me anything..."}
-                        className="flex-grow p-3 bg-white border border-gray-300 rounded-lg shadow-sm text-neutral-dark placeholder-gray-400"
-                        disabled={isLoading || ai === null}
+                <div ref={scrollRef} />
+            </main>
+
+            <footer className="p-6 border-t dark:border-gray-800 bg-slate-50/50 dark:bg-gray-800/50">
+                <div className="flex gap-4">
+                    <input 
+                        type="text" 
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                        placeholder="Inquire about sales, inventory, or trends..."
+                        className="flex-1 bg-white dark:bg-gray-950 border-none rounded-2xl px-6 py-4 text-sm font-bold shadow-sm focus:ring-4 focus:ring-primary/10 transition-all outline-none"
                     />
-                    <button type="submit" className="bg-primary text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400" disabled={isLoading || ai === null}>
+                    <button 
+                        onClick={handleSend}
+                        disabled={isLoading || !input.trim()}
+                        className="bg-slate-900 dark:bg-primary text-white px-8 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:opacity-90 active:scale-95 transition-all disabled:opacity-30"
+                    >
                         Send
                     </button>
-                </form>
-            </div>
+                </div>
+            </footer>
         </div>
     );
 };

@@ -46,8 +46,7 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose, curren
             };
             
             const qrCodeErrorCallback = (errorMessage: string) => {
-                // This callback is called frequently, so we don't want to spam the user.
-                // It can be used for debugging if needed.
+                // Not frequently needed for users
             };
 
             const config = { fps: 10, qrbox: { width: 250, height: 250 } };
@@ -85,24 +84,39 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({ isOpen, onClose, curren
     }
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-50" role="dialog" aria-modal="true">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-md m-4 flex flex-col max-h-[90vh]">
-                <header className="p-4 border-b flex justify-between items-center flex-shrink-0">
-                    <h2 className="text-xl font-bold text-gray-800">Scan to Clock In/Out</h2>
-                    <button onClick={onClose} className="p-2 rounded-full text-gray-500 hover:bg-gray-100" aria-label="Close scanner">
-                        <CloseIcon />
+        <div 
+            className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-fade-in" 
+            role="dialog" 
+            aria-modal="true"
+            onClick={onClose}
+        >
+            <div 
+                className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-2xl w-full max-w-md flex flex-col max-h-[90vh] overflow-hidden animate-scale-in border border-white/10"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <header className="p-6 sm:p-8 border-b dark:border-gray-800 flex justify-between items-center flex-shrink-0">
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white uppercase tracking-tighter leading-none">Identity Scan</h2>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Staff Clock In/Out Protocol</p>
+                    </div>
+                    <button onClick={onClose} className="p-3 -mr-3 -mt-2 rounded-2xl text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-800 transition-all" aria-label="Close scanner">
+                        <CloseIcon className="w-6 h-6" />
                     </button>
                 </header>
 
-                <main className="p-6 flex-grow overflow-y-auto">
-                    <div id={QR_READER_ID} className="w-full rounded-lg overflow-hidden border bg-white"></div>
+                <main className="p-6 sm:p-8 flex-grow overflow-y-auto">
+                    <div id={QR_READER_ID} className="w-full rounded-3xl overflow-hidden border-4 border-slate-50 dark:border-gray-800 bg-black shadow-inner aspect-square"></div>
                     
                     {scanMessage && (
-                        <div className={`mt-4 p-3 rounded-md text-center text-sm font-medium border ${getMessageColor()}`}>
+                        <div className={`mt-6 p-4 rounded-2xl text-center text-xs font-bold uppercase tracking-widest border animate-fade-in ${getMessageColor()}`}>
                             {scanMessage.text}
                         </div>
                     )}
                 </main>
+                
+                <footer className="p-6 sm:p-8 bg-slate-50 dark:bg-gray-800/50 border-t dark:border-gray-800 flex justify-center">
+                    <button onClick={onClose} className="btn-base btn-secondary w-full py-4">Cancel Protocol</button>
+                </footer>
             </div>
         </div>
     );

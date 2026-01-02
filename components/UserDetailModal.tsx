@@ -1,18 +1,20 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import type { User, Sale, AttendanceRecord, PerformanceUser, ReceiptSettingsData, CustomPayment, Customer, Withdrawal, BusinessProfile } from '../types';
-import { formatCurrency, formatAbbreviatedNumber } from '../lib/utils';
+import type { User, Sale, AttendanceRecord, PerformanceUser, ReceiptSettingsData, CustomPayment, Customer, Withdrawal, BusinessProfile, BusinessSettingsData, Expense } from '../types';
+import { formatCurrency, formatAbbreviatedNumber, getStoredItem } from '../lib/utils';
+import { FINALIZED_SALE_STATUSES } from '../constants';
 import WithdrawalReceiptModal from './WithdrawalReceiptModal';
 import PaymentReceiptModal from './PaymentReceiptModal';
-
+import Card from './Card';
 
 interface UserDetailModalProps {
     isOpen: boolean;
     onClose: () => void;
     user: PerformanceUser | null;
     sales: Sale[];
+    expenses: Expense[];
     customers: Customer[];
     onClockInOut: (userId: string) => void;
-    currentUser: User | null; // For permission checks
+    currentUser: User | null;
     receiptSettings: ReceiptSettingsData;
     businessProfile: BusinessProfile | null;
 }
@@ -23,243 +25,284 @@ const CloseIcon = () => (
     </svg>
 );
 
-const MetricCard: React.FC<{ title: string; value: string; fullValue?: string; color?: string }> = ({ title, value, fullValue, color = 'text-gray-900 dark:text-gray-100' }) => (
-    <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg text-center shadow-sm border dark:border-gray-700" title={fullValue}>
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{title}</p>
-        <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
+const MetricCard: React.FC<{ title: string; value: string; fullValue?: string; color?: string; subtext?: string }> = ({ title, value, fullValue, color = 'text-slate-900 dark:text-white', subtext }) => (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-gray-700 flex flex-col justify-center font-sans" title={String(fullValue || '')}>
+        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-2">{String(title)}</p>
+        <p className={`text-2xl font-bold ${color} tracking-tight tabular-nums`}>{String(value)}</p>
+        {subtext && <p className="text-[10px] font-semibold text-slate-400 mt-2 uppercase tracking-widest">{String(subtext)}</p>}
     </div>
 );
 
-const getWithdrawalStatusBadge = (status: Withdrawal['status']) => {
-    const styles: Record<Withdrawal['status'], string> = {
-        pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
-        approved: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
-        paid: 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300',
-        completed: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
-        rejected: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
-    };
-    return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${styles[status]}`}>{status.charAt(0).toUpperCase() + status.slice(1)}</span>;
-};
-
-const getPaymentStatusBadge = (status: CustomPayment['status']) => {
-    const styles: Record<CustomPayment['status'], string> = {
-        pending_user_approval: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
-        rejected_by_user: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
-        approved_by_user: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300',
-        paid: 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300',
-        completed: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
-    };
-    const text: Record<CustomPayment['status'], string> = {
-        pending_user_approval: 'Pending User Approval',
-        rejected_by_user: 'Rejected by User',
-        approved_by_user: 'Approved by User',
-        paid: 'Paid',
-        completed: 'Completed',
-    };
-    return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${styles[status]}`}>{text[status]}</span>;
-};
-
-
-const UserDetailModal: React.FC<UserDetailModalProps> = ({ isOpen, onClose, user, sales, customers, onClockInOut, currentUser, receiptSettings, businessProfile }) => {
-    const [activeTab, setActiveTab] = useState<'financial' | 'attendance' | 'sales'>('financial');
+const UserDetailModal: React.FC<UserDetailModalProps> = ({ isOpen, onClose, user, sales, expenses, customers, onClockInOut, currentUser, receiptSettings, businessProfile }) => {
+    const [activeTab, setActiveTab] = useState<'audit' | 'attendance' | 'transactions'>('audit');
     const [withdrawalReceiptToShow, setWithdrawalReceiptToShow] = useState<Withdrawal | null>(null);
     const [paymentReceiptToShow, setPaymentReceiptToShow] = useState<CustomPayment | null>(null);
     
-    // Reset to financial tab when a new user is selected
     useEffect(() => {
-        if (isOpen) {
-            setActiveTab('financial');
-        }
+        if (isOpen) setActiveTab('audit');
     }, [isOpen, user]);
 
     if (!isOpen || !user) return null;
     
-    const cs = receiptSettings.currencySymbol;
-
-    const availableBalance = user.type === 'commission' 
-        ? user.totalCommission - user.totalWithdrawals 
-        : user.totalHourlyEarnings - user.totalWithdrawals;
-
-    const lastAttendance = user.attendance?.[user.attendance.length - 1];
-    const isClockedIn = !!(lastAttendance && !lastAttendance.clockOut);
+    const cs = String(receiptSettings.currencySymbol || '$');
+    const isHourly = user.type === 'hourly';
+    const isInvestor = user.role === 'Investor' || user.role === 'Owner';
     
-    const canManage = currentUser && ['Owner', 'Manager'].includes(currentUser.role);
-    
-    const sortedWithdrawals = [...(user.withdrawals || [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const sortedCustomPayments = [...(user.customPayments || [])].sort((a, b) => new Date(b.dateInitiated).getTime() - new Date(a.dateInitiated).getTime());
+    const financialSummary = useMemo(() => {
+        if (isInvestor) {
+            const bizId = localStorage.getItem('fintab_active_business_id');
+            const bizSettings = getStoredItem<any>(`fintab_${bizId}_settings`, { investorDistributionPercentage: 100 });
+            const distRate = (bizSettings.investorDistributionPercentage || 100) / 100;
+
+            const allInvestors = getStoredItem<User[]>(`fintab_${bizId}_users`, []).filter(u => (u.role === 'Investor' || u.role === 'Owner') && u.status === 'Active');
+            const totalCapital = allInvestors.reduce((sum, inv) => sum + (inv.initialInvestment || 0), 0);
+            const stake = user.initialInvestment || 0;
+            const sharePercent = totalCapital > 0 ? (stake / totalCapital) : 0;
+
+            const realizedSales = sales.filter(s => FINALIZED_SALE_STATUSES.includes(s.status));
+            const lifetimeGrossProfit = realizedSales.reduce((total, sale) => {
+                const cogs = sale.items.reduce((sum, item) => sum + ((item.product?.costPrice || 0) * item.quantity), 0);
+                return total + (sale.subtotal - sale.discount - cogs);
+            }, 0);
+            
+            const totalExpenses = (expenses || []).reduce((s, e) => s + e.amount, 0);
+            const lifetimeNetProfit = Math.max(0, lifetimeGrossProfit - totalExpenses);
+
+            const earned = lifetimeNetProfit * sharePercent * distRate;
+            const withdrawn = (user.withdrawals || [])
+                .filter(w => w.status === 'completed' && w.source === 'investment')
+                .reduce((sum, w) => sum + w.amount, 0);
+
+            return {
+                earnedCommissions: 0,
+                customTotal: 0,
+                totalEarnings: earned,
+                withdrawnTotal: withdrawn,
+                availableBalance: Math.max(0, earned - withdrawn)
+            };
+        }
+
+        const mySales = sales.filter(s => s.userId === user.id && s.status === 'completed');
+        const earnedCommissions = mySales.reduce((sum, s) => sum + (Number(s.commission) || 0), 0);
+        const customTotal = (user.customPayments || [])
+            .filter(p => p.status === 'completed')
+            .reduce((sum, p) => sum + p.amount, 0);
+        const withdrawnTotal = (user.withdrawals || [])
+            .filter(w => w.status === 'completed')
+            .reduce((sum, w) => sum + w.amount, 0);
+            
+        const totalEarnings = earnedCommissions + customTotal;
+        return {
+            earnedCommissions,
+            withdrawnTotal,
+            customTotal,
+            totalEarnings,
+            availableBalance: Math.max(0, totalEarnings - withdrawnTotal)
+        };
+    }, [user, sales, expenses, isInvestor]);
+
+    const transactionHistory = useMemo(() => {
+        const wds = (user.withdrawals || []).map(w => ({ ...w, txType: 'Withdrawal', displayType: w.source === 'investment' ? 'Dividend Payout' : 'Commission Payout' }));
+        const pms = (user.customPayments || []).map(p => ({ ...p, date: p.dateInitiated, txType: 'Payment', displayType: 'Remittance' }));
+        return [...wds, ...pms].sort((a, b) => new Date(b.date || (b as any).dateInitiated).getTime() - new Date(a.date || (a as any).dateInitiated).getTime());
+    }, [user]);
+
     const recentSales = sales
         .filter(sale => sale.userId === user.id && sale.status === 'completed')
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 10);
-    
-    const displayRole = user.role === 'Custom' && user.customRoleName ? user.customRoleName : user.role;
+        .slice(0, 20);
+
+    const roleName = user.role === 'Custom' && user.customRoleName ? String(user.customRoleName) : String(user.role);
 
     return (
-        <>
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-                <header className="p-4 sm:p-6 border-b dark:border-gray-700 flex justify-between items-center flex-shrink-0">
-                    <div className="flex items-center gap-4">
-                        <img src={user.avatarUrl} alt={user.name} className="w-12 h-12 rounded-full object-cover" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4 animate-fade-in font-sans" role="dialog" aria-modal="true">
+            <div className="bg-[#F8FAFC] dark:bg-gray-950 rounded-[3rem] shadow-2xl w-full max-w-5xl max-h-[95vh] flex flex-col overflow-hidden border border-white/10">
+                {/* Modal Header */}
+                <header className="p-8 bg-white dark:bg-gray-900 border-b dark:border-gray-800 flex justify-between items-center flex-shrink-0">
+                    <div className="flex items-center gap-6">
+                        <div className="relative">
+                            <img src={String(user.avatarUrl)} alt={String(user.name)} className="w-20 h-20 rounded-[2.5rem] object-cover shadow-xl border-4 border-slate-50 dark:border-gray-800" />
+                            <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-white dark:border-gray-900 ${String(user.status) === 'Active' ? 'bg-success' : 'bg-warning'}`}></div>
+                        </div>
                         <div>
-                            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">{user.name}</h2>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">{displayRole}</p>
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-4xl font-bold text-slate-900 dark:text-white uppercase tracking-tighter leading-none">{String(user.name)}</h2>
+                                <span className="px-4 py-1.5 bg-primary text-white text-[9px] font-bold rounded-full uppercase tracking-widest">{String(roleName)}</span>
+                            </div>
+                            <p className="text-sm font-bold text-slate-400 dark:text-slate-500 mt-3 uppercase tracking-widest">{String(user.email)}</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" aria-label="Close user details">
+                    <button onClick={onClose} className="p-4 rounded-3xl text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-800 transition-all">
                         <CloseIcon />
                     </button>
                 </header>
                 
-                <main className="flex-grow overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900">
-                    <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-                        <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-                            <button onClick={() => setActiveTab('financial')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'financial' ? 'border-primary text-primary' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}>Financial Overview</button>
-                            {user.type === 'hourly' && (
-                                <button onClick={() => setActiveTab('attendance')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'attendance' ? 'border-primary text-primary' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}>Attendance Log</button>
-                            )}
-                            <button onClick={() => setActiveTab('sales')} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === 'sales' ? 'border-primary text-primary' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}>Recent Sales</button>
-                        </nav>
-                    </div>
-                    
-                    {activeTab === 'financial' && (
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                                {user.type === 'commission' ? (
-                                    <>
-                                        <MetricCard title="Total Sales Value" value={`${cs}${formatAbbreviatedNumber(user.totalSalesValue)}`} fullValue={formatCurrency(user.totalSalesValue, cs)} />
-                                        <MetricCard title="Commission Earned" value={`${cs}${formatAbbreviatedNumber(user.totalCommission)}`} fullValue={formatCurrency(user.totalCommission, cs)} color="text-green-600 dark:text-green-400" />
-                                    </>
-                                ) : (
-                                    <>
-                                        <MetricCard title="Hours Worked" value={`${user.totalHours.toFixed(2)}`} />
-                                        <MetricCard title="Total Earnings" value={`${cs}${formatAbbreviatedNumber(user.totalHourlyEarnings)}`} fullValue={formatCurrency(user.totalHourlyEarnings, cs)} color="text-green-600 dark:text-green-400" />
-                                    </>
-                                )}
-                                <MetricCard title="Withdrawals" value={`${cs}${formatAbbreviatedNumber(user.totalWithdrawals)}`} fullValue={formatCurrency(user.totalWithdrawals, cs)} color="text-red-600 dark:text-red-400" />
-                                <MetricCard title="Available Balance" value={`${cs}${formatAbbreviatedNumber(availableBalance)}`} fullValue={formatCurrency(availableBalance, cs)} color="text-primary dark:text-accent-sky" />
-                            </div>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700">
-                                    <h4 className="font-semibold text-gray-700 dark:text-gray-200 mb-2">Withdrawal History</h4>
-                                    {sortedWithdrawals.length > 0 ? (
-                                        <ul className="space-y-2 max-h-60 overflow-y-auto">
-                                            {sortedWithdrawals.map(w => (
-                                                <li key={w.id} className="text-sm p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md flex justify-between items-center">
-                                                    <div>
-                                                        <p className="font-medium text-gray-600 dark:text-gray-300">{new Date(w.date).toLocaleDateString()}</p>
-                                                        <p className="font-bold text-red-600 dark:text-red-400">-{formatCurrency(w.amount, cs)}</p>
-                                                    </div>
-                                                    <div className="flex flex-col items-end gap-1 text-right">
-                                                        {getWithdrawalStatusBadge(w.status)}
-                                                        {w.status === 'completed' && (
-                                                            <button onClick={() => setWithdrawalReceiptToShow(w)} className="text-xs font-semibold text-primary hover:underline">View Receipt</button>
-                                                        )}
-                                                    </div>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">No withdrawal history.</p>}
-                                </div>
-                                <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700">
-                                    <h4 className="font-semibold text-gray-700 dark:text-gray-200 mb-2">Custom Payment History</h4>
-                                    {sortedCustomPayments.length > 0 ? (
-                                        <ul className="space-y-2 max-h-60 overflow-y-auto">
-                                            {sortedCustomPayments.map(p => (
-                                                <li key={p.id} className="text-sm p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md flex justify-between items-center">
-                                                    <div>
-                                                        <p className="font-medium text-gray-600 dark:text-gray-300">{p.description}</p>
-                                                        <p className="font-bold text-primary dark:text-accent-sky">{formatCurrency(p.amount, cs)}</p>
-                                                    </div>
-                                                    <div className="flex flex-col items-end gap-1 text-right">
-                                                        {getPaymentStatusBadge(p.status)}
-                                                        {p.status === 'completed' && (
-                                                            <button onClick={() => setPaymentReceiptToShow(p)} className="text-xs font-semibold text-primary hover:underline">View Receipt</button>
-                                                        )}
-                                                    </div>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">No custom payment history.</p>}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'attendance' && user.type === 'hourly' && (
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700">
-                            <div className="flex justify-between items-center mb-3">
-                                <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200">Attendance Log</h3>
-                                <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${isClockedIn ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300'}`}>
-                                    {isClockedIn ? 'Clocked In' : 'Clocked Out'}
-                                </span>
-                            </div>
-                            {canManage && (
-                                <button onClick={() => onClockInOut(user.id)} className={`w-full mb-4 px-4 py-2 text-sm font-semibold rounded-md text-white ${isClockedIn ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}>
-                                    Manually {isClockedIn ? 'Clock Out' : 'Clock In'}
+                {/* Local Navigation */}
+                <div className="px-8 bg-white dark:bg-gray-900 border-b dark:border-gray-800">
+                    <nav className="flex gap-10">
+                        {['audit', 'attendance', 'transactions'].map((tab) => (
+                            (tab !== 'attendance' || isHourly) && (
+                                <button 
+                                    key={String(tab)}
+                                    onClick={() => setActiveTab(tab as any)} 
+                                    className={`py-5 text-[10px] font-bold uppercase tracking-[0.25em] transition-all border-b-4 ${activeTab === tab ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    {String(tab === 'audit' ? 'Performance Audit' : tab === 'transactions' ? 'Financial Ledger' : tab)}
                                 </button>
-                            )}
-                            {user.attendance && user.attendance.length > 0 ? (
-                                <ul className="space-y-2 max-h-96 overflow-y-auto">
-                                    {[...user.attendance].reverse().map((record, index) => (
-                                        <li key={index} className="text-sm p-2 rounded-md bg-gray-50 dark:bg-gray-700/50">
-                                            <p><strong className="text-gray-600 dark:text-gray-400">Clock In:</strong> {new Date(record.clockIn).toLocaleString()}</p>
-                                            <p><strong className="text-gray-600 dark:text-gray-400">Clock Out:</strong> {record.clockOut ? new Date(record.clockOut).toLocaleString() : 'N/A'}</p>
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : (
-                                <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">No attendance records found.</p>
-                            )}
+                            )
+                        ))}
+                    </nav>
+                </div>
+
+                <main className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-10">
+                    {activeTab === 'audit' && (
+                        <div className="space-y-10">
+                            {/* Performance Overview */}
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+                                <MetricCard 
+                                    title={isInvestor ? "Lifetime Earned" : "Lifetime Gross"} 
+                                    value={`${cs}${formatAbbreviatedNumber(financialSummary.totalEarnings)}`} 
+                                    color="text-emerald-600" 
+                                    subtext={isInvestor ? `${(user.initialInvestment || 0).toLocaleString()} capital stake` : (isHourly ? `${Number(user.totalHours).toFixed(1)} hrs accrued` : `${Number(user.salesCount)} conversions`)} 
+                                />
+                                <MetricCard 
+                                    title="Total Payouts" 
+                                    value={`${cs}${formatAbbreviatedNumber(financialSummary.withdrawnTotal)}`} 
+                                    color="text-rose-600" 
+                                    subtext="Disbursed earnings"
+                                />
+                                <MetricCard 
+                                    title="Terminal Balance" 
+                                    value={`${cs}${formatAbbreviatedNumber(financialSummary.availableBalance)}`} 
+                                    color="text-primary" 
+                                    subtext="Funds awaiting liquidation"
+                                />
+                                <MetricCard 
+                                    title={isInvestor ? "Equity Yield" : "Avg Unit Value"} 
+                                    value={isInvestor ? `${financialSummary.totalEarnings > 0 ? ((financialSummary.totalEarnings / (user.initialInvestment || 1)) * 100).toFixed(1) : 0}%` : `${cs}${formatAbbreviatedNumber(user.salesCount > 0 ? Number(user.totalSalesValue) / Number(user.salesCount) : 0)}`} 
+                                    subtext={isInvestor ? "Return on investment" : "Yield KPI"}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                                {/* Activity Log (Only for Staff) */}
+                                {!isInvestor && (
+                                    <section className="space-y-4">
+                                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] px-2">Recent Sales Yield</h4>
+                                        <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] border dark:border-gray-800 overflow-hidden shadow-sm">
+                                            {recentSales.length > 0 ? (
+                                                <div className="divide-y dark:divide-gray-800">
+                                                    {recentSales.map(sale => (
+                                                        <div key={String(sale.id)} className="p-5 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors flex justify-between items-center">
+                                                            <div>
+                                                                <p className="font-bold text-slate-900 dark:text-white uppercase tracking-tight">{new Date(sale.date).toLocaleDateString()}</p>
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Sale Ref: {String(sale.id).slice(-8).toUpperCase()}</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="font-bold text-primary uppercase tabular-nums">{cs}{Number(sale.total).toFixed(2)}</p>
+                                                                <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-0.5">Comm: {cs}{Number(sale.commission || 0).toFixed(2)}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : <div className="p-20 text-center text-slate-300 uppercase tracking-widest font-bold text-[10px]">No sales recorded</div>}
+                                        </div>
+                                    </section>
+                                )}
+
+                                {/* Transaction Log Snippet */}
+                                <section className={`${isInvestor ? 'col-span-2' : ''} space-y-4`}>
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] px-2">Liquidation Records</h4>
+                                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] border dark:border-gray-800 overflow-hidden shadow-sm">
+                                        {transactionHistory.length > 0 ? (
+                                            <div className="divide-y dark:divide-gray-800">
+                                                {transactionHistory.map((item, idx) => (
+                                                    <div key={String(item.id || idx)} className="p-5 flex justify-between items-center hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors">
+                                                        <div>
+                                                            <p className="font-bold text-slate-900 dark:text-white uppercase tracking-tight">{new Date(item.date || (item as any).dateInitiated).toLocaleDateString()}</p>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${String(item.status) === 'completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                                                                    {String(item.displayType || 'N/A')}: {String(item.status || 'N/A').replace(/_/g, ' ')}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <p className={`font-bold uppercase tabular-nums ${String(item.txType) === 'Withdrawal' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                            {String(item.txType) === 'Withdrawal' ? '-' : '+'}{cs}{Number(item.amount || 0).toFixed(2)}
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : <div className="p-20 text-center text-slate-300 uppercase tracking-widest font-bold text-[10px]">Empty Ledger</div>}
+                                    </div>
+                                </section>
+                            </div>
                         </div>
                     )}
 
-                    {activeTab === 'sales' && (
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border dark:border-gray-700">
-                            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-3">Recent Sales</h3>
-                            {recentSales.length > 0 ? (
-                                <ul className="space-y-3 divide-y divide-gray-100 dark:divide-gray-700 max-h-96 overflow-y-auto">
-                                    {recentSales.map(sale => {
-                                        const customer = customers.find(c => c.id === sale.customerId);
-                                        return (
-                                            <li key={sale.id} className="pt-3 first:pt-0">
-                                                <div className="flex justify-between items-center text-sm">
-                                                    <div>
-                                                        <p className="font-medium text-gray-600 dark:text-gray-300">{new Date(sale.date).toLocaleString()}</p>
-                                                        <p className="text-xs text-gray-500 dark:text-gray-400">to {customer?.name || 'Unknown Client'}</p>
+                    {activeTab === 'transactions' && (
+                        <div className="space-y-8">
+                             <h3 className="text-2xl font-bold text-slate-900 dark:text-white uppercase tracking-tighter">Full Financial Ledger</h3>
+                             <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] border dark:border-gray-800 overflow-hidden shadow-xl">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 dark:bg-gray-800 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                                        <tr>
+                                            <th className="px-6 py-6">Transaction Type</th>
+                                            <th className="px-6 py-6">Authorization Date</th>
+                                            <th className="px-6 py-6 text-right">Unit Value</th>
+                                            <th className="px-6 py-6 text-center">Protocol Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y dark:divide-gray-800">
+                                        {transactionHistory.map((item, idx) => (
+                                            <tr key={String(item.id || idx)} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-6 py-8">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-bold ${String(item.txType) === 'Withdrawal' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                            {String(item.txType) === 'Withdrawal' ? 'W' : 'R'}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold text-slate-900 dark:text-white uppercase tracking-tighter">{String(item.displayType || 'N/A')}</p>
+                                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
+                                                                {String((item as any).description || (item as any).notes || (item as any).note || 'Account Balance Liquidation')}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <p className="font-bold text-gray-800 dark:text-gray-100">{formatCurrency(sale.total, cs)}</p>
-                                                </div>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{sale.items.length} items sold</p>
-                                            </li>
-                                        );
-                                    })}
-                                </ul>
-                            ) : (
-                                <p className="text-center text-sm text-gray-500 dark:text-gray-400 py-4">No recent sales found.</p>
-                            )}
+                                                </td>
+                                                <td className="px-6 py-8">
+                                                    <p className="font-bold text-slate-700 dark:text-slate-300 uppercase">{new Date(item.date || (item as any).dateInitiated).toLocaleDateString()}</p>
+                                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{new Date(item.date || (item as any).dateInitiated).toLocaleTimeString()}</p>
+                                                </td>
+                                                <td className="px-6 py-8 text-right font-bold text-lg tabular-nums">
+                                                    <span className={String(item.txType) === 'Withdrawal' ? 'text-rose-600' : 'text-emerald-600'}>
+                                                        {String(item.txType) === 'Withdrawal' ? '-' : '+'}{cs}{Number(item.amount || 0).toFixed(2)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-8 text-center">
+                                                    <span className="text-[9px] font-bold uppercase tracking-widest bg-slate-100 dark:bg-gray-800 px-4 py-2 rounded-xl border border-transparent">
+                                                        {String(item.status || 'N/A').replace(/_/g, ' ')}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {transactionHistory.length === 0 && (
+                                    <div className="py-32 text-center">
+                                        <p className="text-slate-300 font-bold uppercase tracking-[0.4em] text-[10px]">Digital Ledger Empty</p>
+                                    </div>
+                                )}
+                             </div>
                         </div>
                     )}
                 </main>
+                
+                <footer className="p-8 bg-white dark:bg-gray-900 border-t dark:border-gray-800 flex justify-end flex-shrink-0">
+                    <button onClick={onClose} className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-bold uppercase text-[10px] tracking-widest shadow-xl hover:opacity-90 active:scale-95 transition-all">
+                        Exit Audit View
+                    </button>
+                </footer>
             </div>
         </div>
-        <WithdrawalReceiptModal
-            isOpen={!!withdrawalReceiptToShow}
-            onClose={() => setWithdrawalReceiptToShow(null)}
-            withdrawal={withdrawalReceiptToShow}
-            user={user}
-            businessProfile={businessProfile}
-            receiptSettings={receiptSettings}
-        />
-        <PaymentReceiptModal
-            isOpen={!!paymentReceiptToShow}
-            onClose={() => setPaymentReceiptToShow(null)}
-            payment={paymentReceiptToShow}
-            user={user}
-            businessProfile={businessProfile}
-            receiptSettings={receiptSettings}
-        />
-        </>
     );
 };
 

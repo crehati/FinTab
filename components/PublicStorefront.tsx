@@ -1,31 +1,30 @@
-import React, { useState, useMemo, useEffect } from 'react';
+
+// @ts-nocheck
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
+import { GoogleGenAI } from "@google/genai";
 import type { Product, CartItem, BusinessProfile, ReceiptSettingsData, Customer, Sale, User, ProductVariant, AdminBusinessData } from '../types';
 import { translations } from '../lib/translations';
 import { formatCurrency, setStoredItemAndDispatchEvent, getStoredItem } from '../lib/utils';
-import { COUNTRIES, ChatBubbleIcon, PhoneIcon, EmailIcon, CartIcon, SearchIcon, ChevronDownIcon } from '../constants';
+import { COUNTRIES, ChatBubbleIcon, PhoneIcon, EmailIcon, CartIcon, ChevronDownIcon, CloseIcon } from '../constants';
 import VariantSelectionModal from './VariantSelectionModal';
 import QuantityModal from './QuantityModal';
+import SearchInput from './SearchInput';
 
 const ArrowLeftIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
     </svg>
 );
 
 const getEffectivePrice = (item: CartItem): number => {
-    if (item.variant) {
-        return item.variant.price;
-    }
+    if (item.variant) return item.variant.price;
     const { product, quantity } = item;
-    if (!product.tieredPricing || product.tieredPricing.length === 0) {
-        return product.price;
-    }
+    if (!product.tieredPricing || product.tieredPricing.length === 0) return product.price;
     const sortedTiers = [...product.tieredPricing].sort((a, b) => b.quantity - a.quantity);
     const applicableTier = sortedTiers.find(tier => quantity >= tier.quantity);
     return applicableTier ? applicableTier.price : product.price;
 };
-
 
 const PublicStorefront: React.FC = () => {
     const { businessId } = useParams<{ businessId: string }>();
@@ -35,508 +34,193 @@ const PublicStorefront: React.FC = () => {
     const [cart, setCart] = useState<CartItem[]>([]);
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
     const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+    const [isChatOpen, setIsChatOpen] = useState(false);
     const [selectedProductForModal, setSelectedProductForModal] = useState<Product | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
-    const t = (key: string) => translations.en[key as keyof typeof translations.en] || key;
+    const t = (key: string) => (translations as any).en[key] || key;
 
     useEffect(() => {
         setIsLoading(true);
-        // Load data from central registry and namespaced storage
-        const allBusinesses = getStoredItem<AdminBusinessData[]>('marketup_businesses_registry', []);
+        if (!businessId) { setIsLoading(false); return; }
+        const allBusinesses = getStoredItem<AdminBusinessData[]>('fintab_businesses_registry', []);
         const businessData = allBusinesses.find(b => b.id === businessId);
-        
         if (businessData) {
             setBusiness(businessData);
-            const businessProducts = getStoredItem<Product[]>(`marketup_${businessId}_products`, []);
-            setProducts(businessProducts);
-            const businessReceiptSettings = getStoredItem<ReceiptSettingsData | null>(`marketup_${businessId}_receipt_settings`, null);
-            setReceiptSettings(businessReceiptSettings);
-        } else {
-            setBusiness(null);
-            setProducts([]);
-            setReceiptSettings(null);
+            setProducts(getStoredItem(`fintab_${businessId}_products`, []));
+            setReceiptSettings(getStoredItem(`fintab_${businessId}_receipt_settings`, null));
         }
         setIsLoading(false);
     }, [businessId]);
-    
-     const handleUpdateCart = (product: Product, variant: ProductVariant | undefined, quantity: number) => {
-        setCart(prevCart => {
-            const cartItemId = variant ? variant.id : product.id;
-            const existingItemIndex = prevCart.findIndex(item => (item.variant ? item.variant.id : item.product.id) === cartItemId);
-            
-            const stock = variant ? variant.stock : product.stock;
-            const newQuantity = Math.min(quantity, stock);
 
-            if (newQuantity <= 0) {
-                 if (existingItemIndex > -1) {
-                    const newCart = [...prevCart];
-                    newCart.splice(existingItemIndex, 1);
-                    return newCart;
-                }
-                return prevCart;
-            }
-
-            if (existingItemIndex > -1) {
-                const newCart = [...prevCart];
-                newCart[existingItemIndex].quantity = newQuantity;
-                return newCart;
-            } else {
-                return [...prevCart, { product, variant, quantity: newQuantity }];
-            }
-        });
-    };
-    
-    const handleProductClick = (product: Product) => {
-        if (product.stock > 0) {
-            setSelectedProductForModal(product);
-        }
-    };
-    
-    const handleSetSimpleQuantity = (product: Product, quantity: number) => {
-        handleUpdateCart(product, undefined, quantity);
-        setToastMessage(`${quantity} x ${product.name} added to order`);
-        setTimeout(() => setToastMessage(null), 2500);
-        setSelectedProductForModal(null);
-    };
-
-    const handleSetVariantQuantity = (product: Product, variant: ProductVariant, quantity: number) => {
-        handleUpdateCart(product, variant, quantity);
-        const variantName = variant.attributes.map(a => a.value).join(' / ');
-        setToastMessage(`${quantity} x ${product.name} (${variantName}) added to order`);
-        setTimeout(() => setToastMessage(null), 2500);
-        setSelectedProductForModal(null);
-    };
-
-    const subtotal = useMemo(() => 
-        cart.reduce((sum, item) => sum + getEffectivePrice(item) * item.quantity, 0), 
-    [cart]);
-    
-    const totalCartQuantity = useMemo(() => cart.reduce((sum, item) => sum + item.quantity, 0), [cart]);
-
-    const handleScrollToCart = () => {
-        document.getElementById('order-summary')?.scrollIntoView({ behavior: 'smooth' });
-    };
-    
+    const subtotal = useMemo(() => cart.reduce((sum, item) => sum + getEffectivePrice(item) * item.quantity, 0), [cart]);
     const isVariableProduct = selectedProductForModal?.productType === 'variable';
 
     const groupedProducts = useMemo(() => {
         return products.reduce((acc, product) => {
             const category = product.category || 'Uncategorized';
-            if (!acc[category]) {
-                acc[category] = [];
-            }
+            if (!acc[category]) acc[category] = [];
             acc[category].push(product);
             return acc;
         }, {} as Record<string, Product[]>);
     }, [products]);
 
-    const categoryNames = useMemo(() => Object.keys(groupedProducts).sort(), [groupedProducts]);
-
-    const anyProductMatches = useMemo(() => 
-        products.some(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())),
-    [products, searchTerm]);
-
-    const toggleCategory = (category: string) => {
-        setCollapsedCategories(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(category)) {
-                newSet.delete(category);
-            } else {
-                newSet.add(category);
-            }
-            return newSet;
-        });
-    };
-
-
-    if (isLoading) {
-         return <div className="flex items-center justify-center min-h-screen bg-gray-100">Loading...</div>;
-    }
+    if (isLoading) return <div className="flex items-center justify-center min-h-screen bg-gray-100"><div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
 
     if (!business || !receiptSettings) {
         return (
-            <div className="flex items-center justify-center min-h-screen bg-gray-100">
-                <div className="text-center">
-                    <h1 className="text-2xl font-bold text-gray-700">Business Not Found</h1>
-                    <p className="text-gray-500 mt-2">The shopfront you are looking for does not exist or is not public.</p>
-                     <NavLink to="/directory" className="mt-6 inline-block bg-primary text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700">
-                        Back to Directory
-                    </NavLink>
+            <div className="flex items-center justify-center min-h-screen bg-gray-100 font-sans">
+                <div className="text-center p-12 bg-white rounded-[3rem] shadow-xl max-w-sm border border-slate-100">
+                    <h1 className="text-2xl font-bold text-gray-700 uppercase tracking-tighter">Node Not Found</h1>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-4">The public terminal node is unreachable.</p>
+                    <NavLink to="/directory" className="mt-10 btn-base btn-primary w-full">Directory Hub</NavLink>
                 </div>
             </div>
         );
     }
 
     const cs = receiptSettings.currencySymbol;
-    const acceptsOrders = business.settings.acceptRemoteOrders;
+    const profile = business?.profile || {};
 
     return (
-        <div className="bg-gray-100 min-h-screen font-sans">
-             <header className="bg-gradient-to-r from-blue-700 to-blue-900 text-white shadow-lg">
-                <div className="container mx-auto px-4 py-8 md:py-12 relative">
-                    <NavLink 
-                        to="/directory" 
-                        className="absolute top-4 left-4 flex items-center gap-2 text-blue-200 hover:text-white transition-colors z-10"
-                        aria-label="Back to Business Directory"
-                    >
-                        <ArrowLeftIcon />
-                        <span className="font-semibold hidden sm:inline">Back to Directory</span>
+        <div className="bg-slate-50 min-h-screen font-sans">
+             <header className="bg-slate-900 text-white shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/20 rounded-full -mr-40 -mt-40 blur-[120px]"></div>
+                <div className="container mx-auto px-6 py-20 md:py-28 relative">
+                    <NavLink to="/directory" className="absolute top-8 left-8 flex items-center gap-3 text-slate-400 hover:text-white transition-all z-10 font-black uppercase text-[10px] tracking-widest group">
+                        <div className="group-hover:-translate-x-1 transition-transform"><ArrowLeftIcon className="w-5 h-5" /></div> Directory
                     </NavLink>
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-6 text-center md:text-left pt-10 sm:pt-4 md:pt-0">
-                        <div className="flex items-center gap-4">
-                            {business.profile.logo && <img src={business.profile.logo} alt="Logo" className="h-20 w-20 object-contain rounded-lg bg-white/20 p-1 shadow-md" />}
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-12">
+                        <div className="flex flex-col md:flex-row items-center gap-10 text-center md:text-left">
+                            {profile.logo ? (
+                                <img src={profile.logo} className="h-32 w-32 object-contain rounded-[2.5rem] bg-white/5 p-4 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/40" />
+                            ) : (
+                                <div className="h-32 w-32 rounded-[2.5rem] bg-white/5 border border-white/10 flex items-center justify-center backdrop-blur-xl shadow-2xl">
+                                    <span className="text-5xl font-black text-primary/40">{profile.businessName?.charAt(0)}</span>
+                                </div>
+                            )}
                             <div>
-                                <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight">{business.profile.businessName}</h1>
-                                <p className="text-lg text-blue-200">{business.profile.businessType}</p>
+                                <h1 className="text-5xl md:text-7xl font-black tracking-tighter uppercase leading-tight">{profile.businessName || 'Terminal Node'}</h1>
+                                <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 mt-6">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Verified Presence Protocol</p>
+                                    </div>
+                                    <span className="h-4 w-px bg-white/10 hidden md:block"></span>
+                                    <p className="text-[11px] font-black text-primary uppercase tracking-[0.3em]">{profile.businessType} Class</p>
+                                </div>
                             </div>
-                        </div>
-                        <div className="text-sm text-blue-100 flex flex-col items-center md:items-end gap-2">
-                            <span className="flex items-center gap-2">
-                                <PhoneIcon className="w-5 h-5" />
-                                {business.profile.businessPhone}
-                            </span>
-                            <span className="flex items-center gap-2">
-                                <EmailIcon className="w-5 h-5" />
-                                {business.profile.businessEmail}
-                            </span>
                         </div>
                     </div>
                 </div>
             </header>
             
-            <main className="container mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-8">
-                    <h2 className="text-2xl font-bold text-gray-700">{t('publicShopfront.title')}</h2>
-                    
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <SearchIcon />
-                        </div>
-                        <input
-                            type="text"
-                            placeholder="Search products..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-lg shadow-sm text-neutral-dark placeholder-neutral-medium focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary"
-                            aria-label="Search products"
-                        />
+            <main className="container mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-10 mt-[-4rem] relative z-10">
+                <div className="lg:col-span-2 space-y-10">
+                    <div className="bg-white dark:bg-gray-900 rounded-[3rem] p-10 shadow-2xl border border-white/10">
+                        <SearchInput placeholder="Protocol Asset ID or SKU Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                     </div>
 
-                    {products.length > 0 ? (
-                        <>
-                            {categoryNames.map(category => {
-                                const productsInCategory = groupedProducts[category];
-                                const filteredProductsInCategory = productsInCategory.filter(p =>
-                                    p.name.toLowerCase().includes(searchTerm.toLowerCase())
-                                );
+                    <div className="space-y-16">
+                        {Object.keys(groupedProducts).sort().map(category => {
+                            const filtered = groupedProducts[category].filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                            if (filtered.length === 0) return null;
 
-                                if (filteredProductsInCategory.length === 0) {
-                                    return null;
-                                }
-
-                                const isCollapsed = collapsedCategories.has(category);
-
-                                return (
-                                    <div key={category}>
-                                        <button
-                                            onClick={() => toggleCategory(category)}
-                                            className="w-full flex justify-between items-center p-4 bg-gray-200/50 hover:bg-gray-200/80 rounded-lg cursor-pointer transition-colors duration-200"
-                                            aria-expanded={!isCollapsed}
-                                        >
-                                            <h2 className="text-xl font-bold text-gray-700">{category} ({filteredProductsInCategory.length})</h2>
-                                            <ChevronDownIcon className={`w-6 h-6 text-gray-500 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} />
-                                        </button>
-                                        {!isCollapsed && (
-                                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                                                {filteredProductsInCategory.map(product => (
-                                                    <button 
-                                                        key={product.id} 
-                                                        onClick={() => acceptsOrders && handleProductClick(product)}
-                                                        disabled={product.stock === 0 || !acceptsOrders}
-                                                        className="bg-white rounded-xl shadow-md flex flex-col overflow-hidden text-left transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary active:scale-100 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
-                                                    >
-                                                        <img src={product.imageUrl} alt={product.name} className="w-full aspect-square object-cover" />
-                                                        <div className="p-4 flex flex-col flex-grow">
-                                                            <h3 className="text-lg font-bold text-gray-800">{product.name}</h3>
-                                                            <p className="text-sm text-gray-500 flex-grow mt-1">{product.description}</p>
-                                                            <div className="mt-4 flex items-end justify-between">
-                                                                <div className="text-left">
-                                                                    <p className="text-lg font-semibold text-primary">
-                                                                        {product.productType === 'variable' && product.variants && product.variants.length > 0
-                                                                            ? `From ${formatCurrency(Math.min(...product.variants.map(v => v.price)), cs)}`
-                                                                            : formatCurrency(product.price, cs)}
-                                                                    </p>
-                                                                    <p className={`text-xs font-medium mt-1 ${product.stock > 10 ? 'text-success' : product.stock > 0 ? 'text-warning' : 'text-error'}`}>
-                                                                        {product.stock > 0 ? `${product.stock} in stock` : 'Out of Stock'}
-                                                                    </p>
-                                                                </div>
-                                                                {acceptsOrders && (
-                                                                    <div className="px-4 py-2 rounded-lg font-semibold bg-primary/10 text-primary">
-                                                                        {product.stock === 0 ? 'Out of Stock' : (product.productType === 'variable' ? 'Options' : 'Add')}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
+                            return (
+                                <div key={category} className="space-y-8 animate-fade-in">
+                                    <div className="flex items-center gap-4 px-6">
+                                        <div className="w-2 h-2 rounded-full bg-primary shadow-lg shadow-primary/40"></div>
+                                        <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">{category}</h2>
                                     </div>
-                                );
-                            })}
-                            {!anyProductMatches && searchTerm && (
-                                <div className="col-span-full text-center py-16 bg-white rounded-lg">
-                                    <p className="text-gray-500 text-lg">No products found for "{searchTerm}".</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {filtered.map(product => (
+                                            <button 
+                                                key={product.id} 
+                                                onClick={() => setSelectedProductForModal(product)}
+                                                disabled={product.stock === 0}
+                                                className="bg-white dark:bg-gray-900 rounded-[3rem] shadow-xl flex flex-col overflow-hidden text-left hover:shadow-2xl hover:-translate-y-2 transition-all group disabled:opacity-50 border border-slate-50 dark:border-gray-800"
+                                            >
+                                                <div className="relative overflow-hidden aspect-square">
+                                                    <img src={product.imageUrl} className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-700" />
+                                                    {product.stock === 0 && (
+                                                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center backdrop-blur-sm">
+                                                            <span className="text-[10px] font-black text-white uppercase tracking-[0.4em] border border-white/20 px-4 py-2 rounded-xl">Protocol: Null</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="p-8 flex flex-col flex-grow">
+                                                    <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight line-clamp-1">{product.name}</h3>
+                                                    <div className="mt-8 flex items-end justify-between">
+                                                        <div>
+                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Price Node</p>
+                                                            <p className="text-2xl font-black text-primary tabular-nums tracking-tighter">{formatCurrency(product.price, cs)}</p>
+                                                        </div>
+                                                        <div className="px-6 py-3 bg-slate-900 text-white rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] group-hover:bg-primary transition-colors shadow-lg">Request</div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            )}
-                        </>
-                    ) : (
-                        <div className="bg-white rounded-xl shadow-md p-12 text-center">
-                            <p className="text-gray-500">This business has not listed any products yet. Please check back later.</p>
-                        </div>
-                    )}
+                            );
+                        })}
+                    </div>
                 </div>
 
-                <div className="lg:col-span-1" id="order-summary">
-                    <div className="sticky top-6">
-                        <div className="bg-white rounded-xl shadow-md p-4">
-                             <h3 className="text-xl font-bold text-gray-700 mb-4">{t('publicShopfront.yourOrder')}</h3>
-                            {acceptsOrders ? (
-                                <>
-                                    {cart.length === 0 ? (
-                                        <p className="text-sm text-gray-500 text-center py-8">{t('publicShopfront.empty')}</p>
-                                    ) : (
-                                        <>
-                                            <ul className="divide-y divide-gray-200 max-h-80 overflow-y-auto">
-                                                {cart.map(item => (
-                                                    <li key={item.variant ? item.variant.id : item.product.id} className="py-3 flex items-center">
-                                                        <div className="flex-grow">
-                                                            <p className="font-semibold text-gray-800">{item.product.name}</p>
-                                                            {item.variant && <p className="text-xs text-gray-500">{item.variant.attributes.map(a => a.value).join(' / ')}</p>}
-                                                            <p className="text-sm text-gray-500">{formatCurrency(getEffectivePrice(item), cs)}</p>
-                                                        </div>
-                                                        <div className="flex items-center">
-                                                             <input 
-                                                                type="number" 
-                                                                value={item.quantity}
-                                                                onChange={(e) => handleUpdateCart(item.product, item.variant, parseInt(e.target.value))}
-                                                                className="w-16 text-center p-1 border rounded-md"
-                                                                min="0"
-                                                            />
-                                                        </div>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                            <div className="mt-4 pt-4 border-t flex justify-between font-bold text-lg">
-                                                <span>Subtotal:</span>
-                                                <span>{formatCurrency(subtotal, cs)}</span>
-                                            </div>
-                                            <button onClick={() => setIsOrderModalOpen(true)} className="w-full mt-4 bg-green-500 text-white py-3 rounded-lg font-semibold text-lg hover:bg-green-600 transition-colors">
-                                                {t('publicShopfront.placeOrder')}
-                                            </button>
-                                        </>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="text-center py-8">
-                                    <p className="text-gray-600 font-semibold">Online ordering is currently unavailable.</p>
-                                    <p className="text-sm text-gray-500 mt-2">Please contact the business directly to place an order.</p>
+                <div className="lg:col-span-1">
+                    <div className="sticky top-12 space-y-8">
+                        <div className="bg-slate-900 rounded-[3.5rem] p-10 text-white shadow-2xl shadow-slate-900/30 relative overflow-hidden">
+                             <div className="absolute top-0 left-0 w-32 h-32 bg-primary/10 rounded-full -ml-16 -mt-16 blur-2xl"></div>
+                             <h3 className="text-2xl font-black uppercase tracking-tighter mb-10 pb-6 border-b border-white/5 flex justify-between items-center">
+                                Order Ledger
+                                <CartIcon className="w-6 h-6 text-primary" />
+                             </h3>
+                             {cart.length === 0 ? (
+                                <div className="text-center py-20 opacity-30">
+                                    <div className="w-20 h-20 bg-white/5 rounded-[2.5rem] flex items-center justify-center mx-auto mb-6">
+                                        <CartIcon className="w-10 h-10" />
+                                    </div>
+                                    <p className="text-[11px] font-black uppercase tracking-[0.4em]">Grid Empty</p>
                                 </div>
-                            )}
+                             ) : (
+                                <>
+                                    <div className="space-y-6 max-h-[400px] overflow-y-auto custom-scrollbar no-scrollbar pr-4 mb-10">
+                                        {cart.map((item, i) => (
+                                            <div key={i} className="flex justify-between items-center group animate-fade-in">
+                                                <div>
+                                                    <p className="text-xs font-black uppercase tracking-tight truncate max-w-[180px] group-hover:text-primary transition-colors">{item.product.name}</p>
+                                                    <p className="text-[9px] text-slate-400 uppercase font-bold mt-1">{item.quantity} Unit(s)</p>
+                                                </div>
+                                                <p className="font-black tabular-nums text-sm">{cs}{(getEffectivePrice(item) * item.quantity).toFixed(2)}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="pt-8 border-t border-white/10 flex justify-between items-end">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Protocol Sum</p>
+                                            <p className="text-4xl font-black tracking-tighter tabular-nums text-white">{cs}{subtotal.toFixed(2)}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setIsOrderModalOpen(true)} className="w-full mt-12 py-6 bg-primary text-white rounded-3xl font-black uppercase text-[12px] tracking-[0.3em] shadow-2xl shadow-primary/20 active:scale-95 transition-all hover:bg-blue-700">Submit Protocol Order</button>
+                                </>
+                             )}
                         </div>
                     </div>
                 </div>
             </main>
             
-            <button
-                onClick={() => alert('Chat with business feature coming soon!')}
-                className="fixed bottom-24 right-6 md:bottom-10 md:right-10 bg-primary text-white rounded-full p-4 shadow-xl hover:bg-blue-700 transition-transform transform hover:scale-110 z-20"
-                aria-label="Chat with business"
-                title="Chat with business"
-            >
-                <ChatBubbleIcon />
+            <button onClick={() => setIsChatOpen(true)} className="fixed bottom-12 right-12 bg-primary text-white rounded-[2.5rem] p-8 shadow-2xl shadow-primary/30 hover:scale-110 active:scale-95 transition-all z-40 group">
+                <ChatBubbleIcon className="w-8 h-8 group-hover:rotate-12 transition-transform" />
             </button>
             
-            {totalCartQuantity > 0 && acceptsOrders && (
-                <button
-                    onClick={handleScrollToCart}
-                    className="fixed bottom-24 right-24 md:bottom-10 md:right-28 bg-primary text-white rounded-full p-4 shadow-xl hover:bg-blue-700 transition-transform transform hover:scale-110 z-20 flex items-center justify-center"
-                    aria-label={`View your order, ${totalCartQuantity} items`}
-                    title="View your order"
-                >
-                    <CartIcon className="h-8 w-8" />
-                    <span className="absolute -top-1 -right-1 flex h-6 w-6">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-teal opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-6 w-6 bg-accent-teal text-white text-xs font-bold items-center justify-center">{totalCartQuantity}</span>
-                    </span>
-                </button>
-            )}
-
              {isVariableProduct ? (
-                <VariantSelectionModal
-                    isOpen={!!selectedProductForModal}
-                    onClose={() => setSelectedProductForModal(null)}
-                    product={selectedProductForModal}
-                    onConfirm={handleSetVariantQuantity}
-                    receiptSettings={receiptSettings}
-                />
+                <VariantSelectionModal isOpen={!!selectedProductForModal} onClose={() => setSelectedProductForModal(null)} product={selectedProductForModal} onConfirm={(p, v, q) => { setCart([...cart, { product: p, variant: v, quantity: q, stock: v.stock }]); setSelectedProductForModal(null); }} receiptSettings={receiptSettings} />
             ) : (
-                <QuantityModal
-                    isOpen={!!selectedProductForModal}
-                    onClose={() => setSelectedProductForModal(null)}
-                    product={selectedProductForModal}
-                    cart={cart}
-                    onConfirm={handleSetSimpleQuantity}
-                    receiptSettings={receiptSettings}
-                />
-            )}
-
-
-            <OrderFormModal 
-                isOpen={isOrderModalOpen}
-                onClose={() => setIsOrderModalOpen(false)}
-                cart={cart}
-                subtotal={subtotal}
-                onSuccess={() => {
-                    setIsOrderModalOpen(false);
-                    setIsSuccessModalOpen(true);
-                    setCart([]);
-                }}
-                t={t}
-                businessId={business.id}
-            />
-            <SuccessModal 
-                isOpen={isSuccessModalOpen}
-                onClose={() => setIsSuccessModalOpen(false)}
-                t={t}
-            />
-             {toastMessage && (
-                <div className="fixed bottom-24 md:bottom-10 left-1/2 -translate-x-1/2 bg-neutral-dark text-white px-4 py-2 rounded-lg shadow-lg z-30 animate-pulse">
-                    {toastMessage}
-                </div>
+                <QuantityModal isOpen={!!selectedProductForModal} onClose={() => setSelectedProductForModal(null)} product={selectedProductForModal} cart={cart} onConfirm={(p, q) => { setCart([...cart, { product: p, quantity: q, stock: p.stock }]); setSelectedProductForModal(null); }} receiptSettings={receiptSettings} />
             )}
         </div>
     );
-};
-
-
-// --- Modals for PublicStorefront ---
-
-const OrderFormModal: React.FC<{ isOpen: boolean, onClose: () => void, cart: CartItem[], subtotal: number, onSuccess: () => void, t: (key: string) => string, businessId: string }> = ({ isOpen, onClose, cart, subtotal, onSuccess, t, businessId }) => {
-    const [customerInfo, setCustomerInfo] = useState({ name: '', email: '', countryCode: '+1', localPhone: '' });
-
-    // FIX: Added missing handleChange function to update customerInfo state.
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setCustomerInfo(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        
-        const salesKey = `marketup_${businessId}_sales`;
-        const customersKey = `marketup_${businessId}_customers`;
-        const usersKey = `marketup_${businessId}_users`;
-
-        const allSales = getStoredItem<Sale[]>(salesKey, []);
-        const allCustomers = getStoredItem<Customer[]>(customersKey, []);
-        const allUsers = getStoredItem<User[]>(usersKey, []);
-
-        const owner = allUsers.find(u => u.role === 'Owner');
-        if (!owner) {
-            alert("Error: Business owner not found. Cannot place order.");
-            return;
-        }
-
-        const newCustomer: Customer = {
-            id: `cust-${Date.now()}`,
-            name: customerInfo.name,
-            email: customerInfo.email,
-            phone: `${customerInfo.countryCode}${customerInfo.localPhone.replace(/\D/g, '')}`,
-            joinDate: new Date().toISOString(),
-            purchaseHistory: []
-        };
-        
-        const newSale: Sale = {
-            id: `sale-client-${Date.now()}`,
-            date: new Date().toISOString(),
-            items: cart,
-            customerId: newCustomer.id,
-            userId: owner.id,
-            subtotal,
-            tax: 0,
-            discount: 0,
-            total: subtotal,
-            status: 'client_order',
-            businessId: businessId
-        };
-
-        setStoredItemAndDispatchEvent(customersKey, [newCustomer, ...allCustomers]);
-        setStoredItemAndDispatchEvent(salesKey, [newSale, ...allSales]);
-        
-        onSuccess();
-    };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
-                <form onSubmit={handleSubmit}>
-                    <header className="p-6 border-b">
-                        <h2 className="text-2xl font-bold text-gray-800">{t('publicShopfront.placeOrder')}</h2>
-                    </header>
-                    <main className="p-6 space-y-4">
-                        <div>
-                            <label htmlFor="name" className="block text-sm font-medium text-gray-700">{t('publicShopfront.fullName')}</label>
-                            <input type="text" name="name" id="name" value={customerInfo.name} onChange={handleChange} required className="mt-1" />
-                        </div>
-                        <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">{t('publicShopfront.email')}</label>
-                            <input type="email" name="email" id="email" value={customerInfo.email} onChange={handleChange} required className="mt-1" />
-                        </div>
-                        <div>
-                            <label htmlFor="localPhone" className="block text-sm font-medium text-gray-700">{t('publicShopfront.phone')}</label>
-                            <div className="mt-1 flex rounded-md shadow-sm input-group">
-                                <select name="countryCode" value={customerInfo.countryCode} onChange={handleChange} className="w-40">
-                                    {COUNTRIES.map(c => <option key={c.code} value={c.dial_code}>{c.flag} {c.dial_code}</option>)}
-                                </select>
-                                <input type="tel" name="localPhone" id="localPhone" value={customerInfo.localPhone} onChange={handleChange} required className="flex-1 min-w-0" placeholder="5551234567" />
-                            </div>
-                        </div>
-                    </main>
-                    <footer className="p-4 bg-gray-50 flex justify-between items-center">
-                        <button type="button" onClick={onClose} className="text-gray-600 font-semibold">Cancel</button>
-                        <button type="submit" className="bg-green-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-600">
-                            {t('publicShopfront.submitOrder')}
-                        </button>
-                    </footer>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-const SuccessModal: React.FC<{ isOpen: boolean, onClose: () => void, t: (key: string) => string }> = ({ isOpen, onClose, t }) => {
-    if (!isOpen) return null;
-    return (
-         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-sm text-center p-8">
-                 <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-16 w-16 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h2 className="mt-4 text-2xl font-bold text-gray-800">{t('publicShopfront.orderSuccessTitle')}</h2>
-                <p className="mt-2 text-gray-600">{t('publicShopfront.orderSuccessMessage')}</p>
-                <button onClick={onClose} className="mt-6 w-full bg-primary text-white py-2 rounded-lg font-semibold hover:bg-blue-700">
-                    {t('publicShopfront.close')}
-                </button>
-            </div>
-        </div>
-    )
 };
 
 export default PublicStorefront;

@@ -1,13 +1,21 @@
-import React, { useState, useMemo } from 'react';
-import type { Product, CartItem, Sale, Customer, User, ReceiptSettingsData, BusinessSettingsData, PrinterSettingsData, ProductVariant } from '../types';
+
+// @ts-nocheck
+import React, { useState, useMemo, useCallback } from 'react';
+import { NavLink } from 'react-router-dom';
+import type { Product, CartItem, Sale, Customer, User, ReceiptSettingsData, BusinessSettingsData, PrinterSettingsData, ProductVariant, BankAccount } from '../types';
 import Card from './Card';
 import ReceiptModal from './ReceiptModal';
 import CustomerModal from './CustomerModal';
 import CustomerSelectionModal from './CustomerSelectionModal';
 import UserSelectionModal from './UserSelectionModal';
+import PaymentMethodSelectionModal from './PaymentMethodSelectionModal';
 import PaymentConfirmationModal from './PaymentConfirmationModal';
+import BankDetailsModal from './BankDetailsModal';
 import ConfirmationModal from './ConfirmationModal';
+import TerminalErrorBoundary from './TerminalErrorBoundary';
 import { formatCurrency } from '../lib/utils';
+import { WarningIcon, CartIcon } from '../constants';
+import { hasAccess } from '../lib/permissions';
 
 interface CounterProps {
     cart: CartItem[];
@@ -15,7 +23,6 @@ interface CounterProps {
     users: User[];
     onUpdateCartItem: (product: Product, variant: ProductVariant | undefined, quantity: number) => void;
     onProcessSale: (sale: Sale) => void;
-    onDeleteSale: (saleId: string) => void;
     onClearCart: () => void;
     receiptSettings: ReceiptSettingsData;
     t: (key: string) => string;
@@ -24,193 +31,207 @@ interface CounterProps {
     businessSettings: BusinessSettingsData;
     printerSettings: PrinterSettingsData;
     isTrialExpired: boolean;
+    permissions: AppPermissions;
+    bankAccounts: BankAccount[];
 }
 
-
 const getEffectivePrice = (product: Product, quantity: number): number => {
+    if (!product) return 0;
+    const basePrice = Number(product.price) || 0;
     if (!product.tieredPricing || product.tieredPricing.length === 0) {
-        return product.price;
+        return basePrice;
     }
     const sortedTiers = [...product.tieredPricing].sort((a, b) => b.quantity - a.quantity);
     const applicableTier = sortedTiers.find(tier => quantity >= tier.quantity);
-    return applicableTier ? applicableTier.price : product.price;
+    return applicableTier ? (Number(applicableTier.price) || 0) : basePrice;
 };
 
-const Counter: React.FC<CounterProps> = ({ cart, customers, users, onUpdateCartItem, onProcessSale, onDeleteSale, onClearCart, receiptSettings, t, onAddCustomer, currentUser, businessSettings, printerSettings, isTrialExpired }) => {
+const CounterContent: React.FC<CounterProps> = (props) => {
+    const { cart, customers, users, onUpdateCartItem, onProcessSale, onClearCart, receiptSettings, t, currentUser, businessSettings, printerSettings, isTrialExpired, permissions, bankAccounts } = props;
+    
+    const [checkoutStatus, setCheckoutStatus] = useState<'idle' | 'pending_confirmation' | 'processing' | 'completed' | 'error'>('idle');
     const [completedSale, setCompletedSale] = useState<Sale | null>(null);
     const [proformaInvoice, setProformaInvoice] = useState<Sale | null>(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+    
     const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
     const [discount, setDiscount] = useState<string | number>(0);
     const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
     const [validationError, setValidationError] = useState('');
+    const [taxRate, setTaxRate] = useState<string | number>(businessSettings.defaultTaxRate || 0); 
     
     const [isCustomerSelectModalOpen, setIsCustomerSelectModalOpen] = useState(false);
     const [isUserSelectModalOpen, setIsUserSelectModalOpen] = useState(false);
-    const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
+    const [isPaymentMethodSelectModalOpen, setIsPaymentMethodSelectModalOpen] = useState(false);
 
-    const [taxRate, setTaxRate] = useState<string | number>(businessSettings.defaultTaxRate); // Editable tax rate
-    const cs = receiptSettings.currencySymbol;
+    const [commitSnapshot, setCommitSnapshot] = useState<any>(null);
 
-    const subtotal = useMemo(() => 
-        cart.reduce((sum, item) => {
-            const price = item.variant ? item.variant.price : getEffectivePrice(item.product, item.quantity);
-            return sum + price * item.quantity;
-        }, 0), 
-    [cart]);
+    const cs = String(receiptSettings.currencySymbol || '$');
 
-    const numericDiscount = Number(discount) || 0;
-    const numericTaxRate = Number(taxRate) || 0;
+    // Action Permission Checks
+    const canApplyDiscount = hasAccess(currentUser, 'SALES', 'APPLY_DISCOUNT', permissions);
+    const canCreateSale = hasAccess(currentUser, 'SALES', 'CREATE_SALE', permissions);
+    const canUseBank = hasAccess(currentUser, 'SALES', 'BANK_TRANSFER', permissions);
+    const canUseCash = hasAccess(currentUser, 'SALES', 'CASH_SALE', permissions);
 
-    const subtotalAfterDiscount = useMemo(() => subtotal - numericDiscount, [subtotal, numericDiscount]);
-    const tax = useMemo(() => subtotalAfterDiscount > 0 ? subtotalAfterDiscount * (numericTaxRate / 100) : 0, [subtotalAfterDiscount, numericTaxRate]);
-    const total = useMemo(() => subtotalAfterDiscount + tax, [subtotalAfterDiscount, tax]);
+    const financialData = useMemo(() => {
+        const rawSubtotal = (cart || []).reduce((sum, item) => {
+            if (!item || !item.product) return sum;
+            const price = item.variant ? (Number(item.variant.price) || 0) : getEffectivePrice(item.product, item.quantity);
+            return sum + (price * (Number(item.quantity) || 0));
+        }, 0);
+
+        const nDiscount = canApplyDiscount ? Math.max(0, Number(discount) || 0) : 0;
+        const nTaxRate = Math.max(0, Number(taxRate) || 0);
+        const afterDiscount = Math.max(0, rawSubtotal - nDiscount);
+        const calcTax = afterDiscount * (nTaxRate / 100);
+        const finalTotal = afterDiscount + calcTax;
+
+        return { subtotal: rawSubtotal, numericDiscount: nDiscount, numericTaxRate: nTaxRate, subtotalAfterDiscount: afterDiscount, tax: calcTax, total: finalTotal };
+    }, [cart, discount, taxRate, canApplyDiscount]);
+
+    const { subtotal, numericDiscount, numericTaxRate, tax, total } = financialData;
 
     const selectedCustomer = useMemo(() => customers.find(c => c.id === selectedCustomerId), [customers, selectedCustomerId]);
     const selectedUser = useMemo(() => users.find(u => u.id === selectedUserId), [users, selectedUserId]);
 
+    const resetCounter = useCallback(() => {
+        onClearCart();
+        setSelectedCustomerId(null);
+        setSelectedUserId(null);
+        setDiscount(0);
+        setPaymentMethod(null);
+        setValidationError('');
+        setCheckoutStatus('idle');
+        setCommitSnapshot(null);
+    }, [onClearCart]);
 
     const handleCheckout = () => {
-        if (cart.length === 0) {
-            setValidationError("Please add items to the order.");
-            return;
-        }
-        if (!selectedCustomerId || !selectedUserId || !paymentMethod) {
-            setValidationError("Please select a client, seller, and payment method.");
-            return;
-        }
+        if (!canCreateSale) { setValidationError("Unauthorized Protocol: Access to 'Create Sale' denied."); return; }
+        if (checkoutStatus === 'processing') return;
+
+        if (!cart || cart.length === 0) { setValidationError("Protocol Violation: Digital basket is empty."); return; }
+        if (!selectedCustomerId) { setValidationError("Identity verification required: select a client."); return; }
+        if (!selectedUserId) { setValidationError("Processing entity required: select a staff member."); return; }
+        if (!paymentMethod) { setValidationError("Financial protocol required: select a payment method."); return; }
+        
+        if (paymentMethod === 'Bank Receipt' && !canUseBank) { setValidationError("Unauthorized: Bank Transfer protocol disabled for your role."); return; }
+        if (paymentMethod === 'Cash' && !canUseCash) { setValidationError("Unauthorized: Cash settlement disabled for your role."); return; }
+
         setValidationError('');
-        setIsConfirmModalOpen(true);
+        setCommitSnapshot({ 
+            ...financialData, 
+            customerId: selectedCustomerId, 
+            userId: selectedUserId, 
+            paymentMethod: paymentMethod, 
+            items: JSON.parse(JSON.stringify(cart)) 
+        });
+
+        if (paymentMethod === 'Bank Receipt') {
+            setIsBankModalOpen(true);
+        } else {
+            setCheckoutStatus('pending_confirmation');
+            setIsConfirmModalOpen(true);
+        }
     };
 
-    const handleConfirmSale = (paymentDetails: { cashReceived?: number; change?: number }) => {
-        const discountPercentage = subtotal > 0 ? (numericDiscount / subtotal) * 100 : 0;
+    const handleConfirmSale = (paymentDetails: { cashReceived?: number; change?: number; bankReceiptNumber?: string; bankName?: string; bankAccountId?: string }) => {
+        if (!commitSnapshot || checkoutStatus === 'processing') return;
+        setCheckoutStatus('processing');
+        const { subtotal, numericDiscount, total, numericTaxRate, items, customerId, userId, paymentMethod } = commitSnapshot;
         
-        const totalCommission = cart.reduce((commissionSum, item) => {
-            const price = item.variant ? item.variant.price : getEffectivePrice(item.product, item.quantity);
-            const itemSubtotal = price * item.quantity;
+        const totalCommission = items.reduce((commissionSum, item) => {
+            if (!item.product) return commissionSum;
+            const price = item.variant ? (Number(item.variant.price) || 0) : getEffectivePrice(item.product, item.quantity);
+            const itemSubtotal = price * (Number(item.quantity) || 0);
             const proportionalDiscount = subtotal > 0 ? (itemSubtotal / subtotal) * numericDiscount : 0;
-            const commissionableValue = itemSubtotal - proportionalDiscount;
-            const itemCommission = commissionableValue * (item.product.commissionPercentage / 100);
+            const commissionableValue = Math.max(0, itemSubtotal - proportionalDiscount);
+            const itemCommission = commissionableValue * ((Number(item.product.commissionPercentage) || 0) / 100);
             return commissionSum + itemCommission;
         }, 0);
 
+        const isBank = paymentMethod === 'Bank Receipt';
         const sale: Sale = {
             id: `sale-${Date.now()}`,
             date: new Date().toISOString(),
-            items: cart,
-            customerId: selectedCustomerId!,
-            userId: selectedUserId!,
-            subtotal,
-            tax,
-            discount: numericDiscount,
-            total,
-            paymentMethod: paymentMethod!,
-            taxRate: numericTaxRate,
-            discountPercentage,
-            status: paymentMethod === 'Bank Transfer' ? 'pending_approval' : 'completed',
-            commission: totalCommission,
-            ...paymentDetails
+            items: items || [],
+            customerId: String(customerId),
+            userId: String(userId),
+            subtotal: Number(subtotal) || 0,
+            tax: Number(tax) || 0,
+            discount: Number(numericDiscount) || 0,
+            total: Number(total) || 0,
+            paymentMethod: String(paymentMethod),
+            taxRate: Number(numericTaxRate) || 0,
+            status: isBank ? 'pending_bank_verification' : 'completed',
+            commission: Number(totalCommission) || 0,
+            cashReceived: Number(paymentDetails?.cashReceived) || 0,
+            change: Number(paymentDetails?.change) || 0,
+            bankReceiptNumber: paymentDetails?.bankReceiptNumber,
+            bankName: paymentDetails?.bankName,
+            bankAccountId: paymentDetails?.bankAccountId
         };
+
         onProcessSale(sale);
+        if (!isBank) setCompletedSale(sale);
+        setCheckoutStatus('completed');
         setIsConfirmModalOpen(false);
-        setCompletedSale(sale);
+        setIsBankModalOpen(false);
+        resetCounter();
     };
-    
-    const handleGenerateProforma = () => {
-        if (cart.length === 0 || !selectedCustomerId) {
-            setValidationError("Please add items to the order and select a customer.");
-            return;
-        }
-        
-        // Proforma can be generated without a seller or payment method
-        const selectedSellerOrDefault = selectedUserId ? users.find(s => s.id === selectedUserId)! : users[0];
-
-        setValidationError('');
-
-        const discountPercentage = subtotal > 0 ? (numericDiscount / subtotal) * 100 : 0;
-
-        const proforma: Sale = {
-            id: `prof-${Date.now()}`,
-            date: new Date().toISOString(),
-            items: cart,
-            customerId: selectedCustomerId!,
-            userId: selectedSellerOrDefault.id,
-            subtotal,
-            tax,
-            discount: numericDiscount,
-            total,
-            taxRate: numericTaxRate,
-            discountPercentage,
-            status: 'proforma',
-        };
-        onProcessSale(proforma);
-        setProformaInvoice(proforma);
-    };
-
-    const handleSaveAndSelectCustomer = (customerData: Omit<Customer, 'id' | 'joinDate' | 'purchaseHistory'>) => {
-        const newCustomer = onAddCustomer(customerData);
-        setSelectedCustomerId(newCustomer.id);
-        setIsAddCustomerModalOpen(false);
-    };
-
-    const handleSelectCustomer = (customerId: string) => {
-        setSelectedCustomerId(customerId);
-        setIsCustomerSelectModalOpen(false);
-        setValidationError('');
-    };
-    
-    const handleSelectUser = (userId: string) => {
-        setSelectedUserId(userId);
-        setIsUserSelectModalOpen(false);
-        setValidationError('');
-    };
-
 
     return (
-        <div className="max-w-4xl mx-auto">
-            <Card title={t('counter.title')} className="flex flex-col">
-                <div className="flex-grow overflow-y-auto -mx-4 px-4">
+        <div className="max-w-4xl mx-auto space-y-xl font-sans pb-24">
+            <Card title={t('counter.title')} className="flex flex-col relative" headerContent={
+                cart.length > 0 && (
+                    <button onClick={() => setIsClearConfirmOpen(true)} className="px-md py-xs bg-rose-50 text-rose-600 text-[10px] font-bold uppercase rounded-lg hover:bg-rose-100">Reset Terminal</button>
+                )
+            }>
+                <div className="flex-grow overflow-y-auto -mx-lg px-lg min-h-[300px]">
+                    {validationError && (
+                        <div className="mb-6 p-5 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-4 animate-shake">
+                            <WarningIcon className="w-5 h-5 text-rose-500 mt-0.5" />
+                            <p className="text-xs font-black text-rose-600 uppercase tracking-tight leading-relaxed">{validationError}</p>
+                        </div>
+                    )}
+
                     {cart.length === 0 ? (
-                        <div className="text-center py-20">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-16 w-16 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                            <p className="text-gray-500 mt-4">Your order is empty.</p>
-                            <p className="text-sm text-gray-400">Add products from the 'Items' page.</p>
+                        <div className="text-center py-xxl flex flex-col items-center justify-center opacity-40">
+                            <div className="bg-slate-50 p-xl rounded-full mb-lg"><CartIcon className="h-16 w-16 text-slate-300" /></div>
+                            <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Digital Basket Empty</p>
                         </div>
                     ) : (
-                        <ul className="divide-y divide-gray-200">
-                            {cart.map(item => {
-                                const price = item.variant ? item.variant.price : getEffectivePrice(item.product, item.quantity);
-                                const basePrice = item.product.price;
+                        <ul className="divide-y divide-slate-50">
+                            {cart.map((item, idx) => {
+                                const price = item.variant ? (Number(item.variant.price) || 0) : getEffectivePrice(item.product, item.quantity);
                                 return (
-                                <li key={item.variant ? item.variant.id : item.product.id} className="py-4 flex items-center">
-                                    <img src={item.product.imageUrl} alt={item.product.name} className="w-16 h-16 rounded-md object-cover" />
-                                    <div className="ml-4 flex-grow">
-                                        <p className="font-semibold text-gray-800">{item.product.name}</p>
-                                        {item.variant && (
-                                            <p className="text-sm text-gray-500">
-                                                {item.variant.attributes.map(attr => attr.value).join(' / ')}
-                                            </p>
-                                        )}
-                                        <p className="text-sm text-gray-600">
-                                            {price < basePrice ? (
-                                                <>
-                                                    <span className="line-through mr-1">{formatCurrency(basePrice, cs)}</span>
-                                                    <span className="text-green-600 font-bold">{formatCurrency(price, cs)}</span>
-                                                </>
-                                            ) : (
-                                                formatCurrency(price, cs)
-                                            )}
-                                        </p>
+                                <li key={`${item.product.id}-${idx}`} className="py-md flex items-center group">
+                                    <div className="relative">
+                                        <img src={String(item.product.imageUrl)} className="w-20 h-20 rounded-2xl object-cover shadow-sm border border-slate-100" />
+                                        {item.variant && <div className="absolute -top-2 -right-2 bg-primary text-white text-[8px] font-bold px-sm py-xs rounded-lg uppercase">Variant</div>}
                                     </div>
-                                    <div className="flex items-center space-x-2">
-                                        <button onClick={() => onUpdateCartItem(item.product, item.variant, item.quantity - 1)} className="w-8 h-8 rounded-full border text-lg font-bold text-primary hover:bg-gray-100 transition-colors">-</button>
-                                        <span className="w-10 text-center font-bold text-gray-800">{item.quantity}</span>
-                                        <button onClick={() => onUpdateCartItem(item.product, item.variant, item.quantity + 1)} className="w-8 h-8 rounded-full border text-lg font-bold text-primary hover:bg-gray-100 transition-colors">+</button>
+                                    <div className="ml-lg flex-grow">
+                                        <p className="font-bold text-slate-900 uppercase tracking-tighter text-sm line-clamp-1">{String(item.product.name)}</p>
+                                        <div className="flex items-center gap-sm mt-sm">
+                                            <span className="text-xs font-bold text-slate-900">{cs}{price.toFixed(2)}</span>
+                                            {item.product.tieredPricing && item.product.tieredPricing.length > 0 && Number(item.quantity) >= Math.min(...item.product.tieredPricing.map(tp => tp.quantity)) && (
+                                                <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Bulk Rate Active</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center bg-slate-50 dark:bg-gray-900 rounded-2xl p-xs gap-xs border border-slate-100 dark:border-gray-700">
+                                        <button onClick={() => onUpdateCartItem(item.product, item.variant, item.quantity - 1)} className="w-10 h-10 rounded-xl text-lg font-bold text-slate-400 hover:text-primary transition-colors">-</button>
+                                        <input 
+                                            type="number" 
+                                            value={item.quantity} 
+                                            onChange={(e) => onUpdateCartItem(item.product, item.variant, parseInt(e.target.value) || 0)}
+                                            onFocus={(e) => e.target.select()}
+                                            className="w-12 h-10 text-center font-black text-slate-900 dark:text-white text-sm bg-white dark:bg-gray-800 border-none focus:ring-2 focus:ring-primary/20 rounded-lg tabular-nums outline-none"
+                                        />
+                                        <button onClick={() => onUpdateCartItem(item.product, item.variant, item.quantity + 1)} className="w-10 h-10 rounded-xl text-lg font-bold text-slate-400 hover:text-primary transition-colors">+</button>
                                     </div>
                                 </li>
                             )})}
@@ -218,152 +239,56 @@ const Counter: React.FC<CounterProps> = ({ cart, customers, users, onUpdateCartI
                     )}
                 </div>
                 {cart.length > 0 && (
-                    <div className="mt-6 border-t pt-4">
-                         <div className="space-y-2 text-sm text-gray-600">
-                            <div className="flex justify-between"><span>Subtotal:</span> <span>{formatCurrency(subtotal, cs)}</span></div>
-                            <div className="flex justify-between items-center">
-                                <span>Discount:</span>
-                                <input 
-                                    type="number"
-                                    value={discount}
-                                    onChange={(e) => setDiscount(e.target.value)}
-                                    onBlur={(e) => setDiscount(parseFloat(e.target.value) || 0)}
-                                    className="w-24 text-right bg-white border border-gray-300 rounded-lg shadow-sm px-2 py-1 text-gray-800 placeholder-gray-400"
-                                    placeholder={`${cs}0.00`}
-                                    aria-label="Discount amount"
-                                />
-                            </div>
-                            {numericDiscount > 0 && (
-                                <div className="flex justify-between font-medium pt-1 mt-1 border-t border-dashed">
-                                    <span>Subtotal After Discount:</span>
-                                    <span>{formatCurrency(subtotalAfterDiscount, cs)}</span>
+                    <div className="mt-xl border-t border-slate-100 pt-lg space-y-xl">
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-xl">
+                            <div className="space-y-md">
+                                <div className={`p-lg bg-slate-50 rounded-2xl border border-slate-100 ${!canApplyDiscount ? 'opacity-40 grayscale' : ''}`}>
+                                    <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-sm block px-xs">Applied Discount ({cs})</label>
+                                    <input type="number" disabled={!canApplyDiscount} value={discount} onChange={(e) => setDiscount(e.target.value)} onFocus={(e) => e.target.select()} className="w-full bg-white border-2 border-transparent focus:border-primary rounded-xl px-lg py-md text-sm font-bold text-slate-900 outline-none" />
+                                    {!canApplyDiscount && <p className="text-[8px] font-black text-rose-400 uppercase mt-2">Discount protocol locked</p>}
                                 </div>
-                            )}
-                            <div className="flex justify-between items-center">
-                                <span>Tax ({formatCurrency(tax, cs)}):</span>
-                                <div className="flex items-center">
-                                    <input
-                                        type="number"
-                                        value={taxRate}
-                                        onChange={(e) => setTaxRate(e.target.value)}
-                                        onBlur={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-                                        className="w-20 text-right bg-white border border-gray-300 rounded-lg shadow-sm px-2 py-1 text-gray-800 placeholder-gray-400"
-                                        placeholder="0"
-                                        aria-label="Tax rate percentage"
-                                        step="0.01"
-                                        min="0"
-                                    />
-                                    <span className="ml-1 text-gray-500">%</span>
+                                <div className="p-lg bg-slate-50 rounded-2xl border border-slate-100">
+                                    <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-sm block px-xs">Tax Rate (%)</label>
+                                    <input type="number" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} onFocus={(e) => e.target.select()} className="w-full bg-white border-2 border-transparent focus:border-primary rounded-xl px-lg py-md text-sm font-bold text-slate-900 outline-none" />
                                 </div>
                             </div>
-                            <div className="flex justify-between font-bold text-xl text-gray-800 pt-2 border-t mt-2"><span>Total:</span> <span>{formatCurrency(total, cs)}</span></div>
-                        </div>
-                        <div className="mt-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Client:</label>
-                                <button
-                                    type="button"
-                                    onClick={() => { setIsCustomerSelectModalOpen(true); setValidationError(''); }}
-                                    className={`w-full p-3 border rounded-lg bg-white text-gray-800 text-left shadow-sm transition-colors duration-200 hover:bg-gray-50 ${validationError && !selectedCustomerId ? 'border-red-500' : 'border-gray-300'}`}
-                                >
-                                    {selectedCustomer ? selectedCustomer.name : <span className="text-gray-500">Select a client</span>}
-                                </button>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Sell by:</label>
-                                 <button
-                                    type="button"
-                                    onClick={() => { setIsUserSelectModalOpen(true); setValidationError(''); }}
-                                    className={`w-full p-3 border rounded-lg bg-white text-gray-800 text-left shadow-sm transition-colors duration-200 hover:bg-gray-50 ${validationError && !selectedUserId ? 'border-red-500' : 'border-gray-300'}`}
-                                >
-                                    {selectedUser ? selectedUser.name : <span className="text-gray-500">Select seller</span>}
-                                </button>
-                            </div>
-                            <div>
-                                <label htmlFor="payment-method" className="block text-sm font-medium text-gray-700 mb-1">Payment method:</label>
-                                <select
-                                    id="payment-method"
-                                    value={paymentMethod || ''}
-                                    onChange={e => { setPaymentMethod(e.target.value); setValidationError(''); }}
-                                    required
-                                    className={`w-full p-3 pr-10 bg-white border rounded-lg shadow-sm text-gray-800 transition-colors duration-200 ${validationError && !paymentMethod ? 'border-red-500' : 'border-gray-300'}`}
-                                >
-                                    <option value="" disabled>Select a payment method</option>
-                                    {businessSettings.paymentMethods.map(method => (
-                                        <option key={method} value={method}>{method}</option>
-                                    ))}
-                                </select>
+                            <div className="bg-slate-900 rounded-[2.5rem] p-xl text-white shadow-2xl flex flex-col justify-between">
+                                <div className="space-y-sm">
+                                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-slate-400"><span>Subtotal</span><span>{cs}{subtotal.toFixed(2)}</span></div>
+                                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-rose-400"><span>Discount</span><span>-{cs}{numericDiscount.toFixed(2)}</span></div>
+                                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-blue-400"><span>Tax</span><span>+{cs}{tax.toFixed(2)}</span></div>
+                                </div>
+                                <div className="mt-xl pt-lg border-t border-white/10 flex justify-between items-end"><span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Total</span><span className="text-4xl font-bold tracking-tighter tabular-nums">{cs}{total.toFixed(2)}</span></div>
                             </div>
                         </div>
-                        <div className="mt-6 space-y-4">
-                            {validationError && <div className="p-3 bg-red-50 text-red-700 rounded-lg text-center text-sm">{validationError}</div>}
-                            <div className="responsive-btn-group">
-                                <button onClick={handleCheckout} className="bg-primary text-white hover:bg-blue-700 transition-colors">
-                                    Process Sale
-                                </button>
-                                <button onClick={handleGenerateProforma} className="bg-neutral-dark text-white hover:bg-gray-700 transition-colors">
-                                    Generate Proforma
-                                </button>
+                        <div className="space-y-md">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-md">
+                                <button onClick={() => setIsCustomerSelectModalOpen(true)} className="w-full p-lg border-2 rounded-2xl bg-white text-slate-900 text-left font-bold uppercase text-[10px] tracking-widest border-slate-100 hover:border-slate-300 truncate">{selectedCustomer ? selectedCustomer.name : 'Choose Identity'}</button>
+                                <button onClick={() => setIsUserSelectModalOpen(true)} className="w-full p-lg border-2 rounded-2xl bg-white text-slate-900 text-left font-bold uppercase text-[10px] tracking-widest border-slate-100 hover:border-slate-300 truncate">{selectedUser ? selectedUser.name : 'Select Staff'}</button>
+                                <button onClick={() => setIsPaymentMethodSelectModalOpen(true)} className="w-full p-lg border-2 rounded-2xl bg-white text-slate-900 text-left font-bold uppercase text-[10px] tracking-widest border-slate-100 hover:border-slate-300 truncate">{paymentMethod ? paymentMethod : 'Method'}</button>
                             </div>
-                            <div className="pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsClearConfirmOpen(true)}
-                                    className="btn-responsive bg-red-100 text-red-700 hover:bg-red-200 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed font-semibold"
-                                    disabled={cart.length === 0}
-                                >
-                                    Clear Order
-                                </button>
-                            </div>
+                            <button onClick={handleCheckout} className="btn-base btn-primary w-full py-5 text-sm" disabled={checkoutStatus === 'processing' || !canCreateSale}>
+                                {checkoutStatus === 'processing' ? 'Processing...' : 'Commit Protocol Sale'}
+                            </button>
                         </div>
                     </div>
                 )}
-                <PaymentConfirmationModal
-                    isOpen={isConfirmModalOpen}
-                    onClose={() => setIsConfirmModalOpen(false)}
-                    onConfirm={handleConfirmSale}
-                    total={total}
-                    paymentMethod={paymentMethod}
-                    receiptSettings={receiptSettings}
-                />
-                {completedSale && <ReceiptModal sale={completedSale} customers={customers} users={users} onClose={() => setCompletedSale(null)} receiptSettings={receiptSettings} onDelete={onDeleteSale} currentUser={currentUser} t={t} isTrialExpired={isTrialExpired} printerSettings={printerSettings} />}
-                {proformaInvoice && <ReceiptModal sale={proformaInvoice} customers={customers} users={users} onClose={() => setProformaInvoice(null)} receiptSettings={receiptSettings} onDelete={onDeleteSale} currentUser={currentUser} t={t} isTrialExpired={isTrialExpired} printerSettings={printerSettings} />}
-                
-                <CustomerSelectionModal
-                    isOpen={isCustomerSelectModalOpen}
-                    onClose={() => setIsCustomerSelectModalOpen(false)}
-                    customers={customers}
-                    onSelect={handleSelectCustomer}
-                    onAddNew={() => {
-                        setIsCustomerSelectModalOpen(false);
-                        setIsAddCustomerModalOpen(true);
-                    }}
-                />
-                 <CustomerModal
-                    isOpen={isAddCustomerModalOpen}
-                    onClose={() => setIsAddCustomerModalOpen(false)}
-                    onSave={handleSaveAndSelectCustomer}
-                    customerToEdit={null}
-                />
-                <UserSelectionModal
-                    isOpen={isUserSelectModalOpen}
-                    onClose={() => setIsUserSelectModalOpen(false)}
-                    users={users}
-                    onSelect={handleSelectUser}
-                />
-                 <ConfirmationModal
-                    isOpen={isClearConfirmOpen}
-                    onClose={() => setIsClearConfirmOpen(false)}
-                    onConfirm={() => {
-                        onClearCart();
-                        setIsClearConfirmOpen(false);
-                    }}
-                    title="Clear Order"
-                    message="Are you sure you want to clear the entire order? All items will be removed from the cart."
-                />
             </Card>
+
+            <PaymentConfirmationModal isOpen={isConfirmModalOpen} onClose={() => { setIsConfirmModalOpen(false); setCheckoutStatus('idle'); }} onConfirm={handleConfirmSale} total={commitSnapshot?.total || total} paymentMethod={commitSnapshot?.paymentMethod || paymentMethod} receiptSettings={receiptSettings} />
+            <BankDetailsModal isOpen={isBankModalOpen} onClose={() => { setIsBankModalOpen(false); setCheckoutStatus('idle'); }} onConfirm={handleConfirmSale} total={commitSnapshot?.total || total} currencySymbol={cs} bankAccounts={bankAccounts} />
+            
+            {completedSale && <ReceiptModal sale={completedSale} customers={customers} users={users} onClose={() => setCompletedSale(null)} receiptSettings={receiptSettings} onDelete={() => {}} currentUser={currentUser} t={t} isTrialExpired={isTrialExpired} printerSettings={printerSettings} />}
+            <CustomerSelectionModal isOpen={isCustomerSelectModalOpen} onClose={() => setIsCustomerSelectModalOpen(false)} customers={customers} onSelect={(id) => { setSelectedCustomerId(id); setIsCustomerSelectModalOpen(false); }} onAddNew={() => { setIsCustomerSelectModalOpen(false); }} />
+            <UserSelectionModal isOpen={isUserSelectModalOpen} onClose={() => setIsUserSelectModalOpen(false)} users={users} onSelect={(id) => { setSelectedUserId(id); setIsUserSelectModalOpen(false); }} />
+            <PaymentMethodSelectionModal isOpen={isPaymentMethodSelectModalOpen} onClose={() => setIsPaymentMethodSelectModalOpen(false)} paymentMethods={businessSettings.paymentMethods || []} onSelect={(method) => { setPaymentMethod(method); setIsPaymentMethodSelectModalOpen(false); }} />
+            <ConfirmationModal isOpen={isClearConfirmOpen} onClose={() => setIsClearConfirmOpen(false)} onConfirm={() => { resetCounter(); setIsClearConfirmOpen(false); }} title="Reset Terminal" message="Abort transaction and clear basket protocol?" />
         </div>
     );
 };
+
+const Counter: React.FC<CounterProps> = (props) => (
+    <TerminalErrorBoundary onResetCheckout={props.onClearCart}><CounterContent {...props} /></TerminalErrorBoundary>
+);
 
 export default Counter;

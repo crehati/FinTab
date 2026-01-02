@@ -1,7 +1,10 @@
+
 import React, { useState } from 'react';
 import type { Product, ReceiptSettingsData } from '../types';
-import Card from './Card';
+import EmptyState from './EmptyState';
 import { formatCurrency } from '../lib/utils';
+import { CommissionIcon, InventoryIcon } from '../constants';
+import { useNavigate } from 'react-router-dom';
 
 interface CommissionProps {
     products: Product[];
@@ -10,11 +13,12 @@ interface CommissionProps {
     receiptSettings: ReceiptSettingsData;
 }
 
-const Commission: React.FC<CommissionProps> = ({ products, setProducts, t, receiptSettings }) => {
+const Commission: React.FC<CommissionProps> = ({ products = [], setProducts, t, receiptSettings }) => {
     const [editingState, setEditingState] = useState<{ id: string | null; value: string }>({ id: null, value: '' });
+    const navigate = useNavigate();
 
     const handleCommissionChange = (productId: string, newCommission: number) => {
-        const commission = Math.max(0, newCommission); // Ensure commission is not negative
+        const commission = Math.max(0, newCommission);
         setProducts(prevProducts =>
             prevProducts.map(p =>
                 p.id === productId ? { ...p, commissionPercentage: commission } : p
@@ -39,103 +43,122 @@ const Commission: React.FC<CommissionProps> = ({ products, setProducts, t, recei
     };
 
     return (
-        <Card title={t('commission.title')}>
-            <p className="mb-4 text-sm text-gray-600">
-                Set the commission rate for each product. This rate will be used to calculate staff earnings on completed sales after any discounts are applied.
-            </p>
-            <div className="overflow-x-auto">
-                {/* Desktop Table */}
-                <table className="hidden md:table w-full text-sm text-left text-gray-500">
-                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                        <tr>
-                            <th scope="col" className="px-6 py-3">Product</th>
-                            <th scope="col" className="px-6 py-3">Price</th>
-                            <th scope="col" className="px-6 py-3" style={{ width: '300px' }}>Commission Rate (%)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {products.map(product => (
-                            <tr key={product.id} className="bg-white border-b hover:bg-gray-50">
-                                <th scope="row" className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap flex items-center">
-                                    <img src={product.imageUrl} alt={product.name} className="w-10 h-10 rounded-lg mr-3 object-cover" />
-                                    {product.name}
-                                </th>
-                                <td className="px-6 py-4 text-gray-800">{formatCurrency(product.price, receiptSettings.currencySymbol)}</td>
-                                <td className="px-6 py-4">
-                                    {editingState.id === product.id ? (
-                                        <div className="flex items-center gap-2">
-                                            <div className="relative">
-                                                <input
-                                                    type="number"
-                                                    value={editingState.value}
-                                                    onChange={(e) => setEditingState({ ...editingState, value: e.target.value })}
-                                                    className="w-24 pl-3 pr-8 py-2 border border-primary rounded-md shadow-sm focus:ring-primary focus:border-primary"
-                                                    autoFocus
-                                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveClick(product.id); } if (e.key === 'Escape') handleCancelClick(); }}
-                                                    min="0"
-                                                    step="0.1"
-                                                />
-                                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                                    <span className="text-gray-500 sm:text-sm">%</span>
-                                                </div>
-                                            </div>
-                                            <button onClick={() => handleSaveClick(product.id)} className="text-sm font-semibold text-green-600 hover:text-green-800">Save</button>
-                                            <button onClick={handleCancelClick} className="text-sm font-semibold text-gray-500 hover:text-gray-700">Cancel</button>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center justify-start gap-4 h-[42px]">
-                                            <span className="font-medium text-gray-800">{product.commissionPercentage}%</span>
-                                            <button onClick={() => handleEditClick(product)} className="text-sm font-medium text-primary hover:underline">Edit</button>
-                                        </div>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {/* Mobile Cards */}
-                <div className="md:hidden space-y-3">
-                    {products.map(product => (
-                        <div key={product.id} className="bg-white p-4 rounded-xl shadow border">
-                            <div className="flex items-center gap-4">
-                                <img src={product.imageUrl} alt={product.name} className="w-16 h-16 rounded-lg object-cover" />
-                                <div className="flex-grow">
-                                    <p className="font-semibold text-gray-800">{product.name}</p>
-                                    <p className="text-sm text-gray-500">{formatCurrency(product.price, receiptSettings.currencySymbol)}</p>
+        <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-xl p-8 border border-white/10">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-10 gap-6">
+                    <div>
+                        <h2 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tighter leading-none">Commissions</h2>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-4">Per-SKU Staff Yield Configuration</p>
+                    </div>
+                    
+                    <div className="max-w-md bg-blue-50 dark:bg-blue-900/20 p-5 rounded-[2rem] border border-blue-100 dark:border-blue-900/30">
+                        <p className="text-[10px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wide leading-relaxed">
+                            Yield protocols define staff earnings on completed transactions after discounts. Configure percentage-based incentives below.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="min-h-[500px]">
+                    {products.length > 0 ? (
+                        <>
+                            <div className="table-wrapper hidden md:block">
+                                <div className="table-container max-h-[700px]">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Product Asset</th>
+                                                <th scope="col">Market Value</th>
+                                                <th scope="col">Yield Percentage (%)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {products.map(product => (
+                                                <tr key={product.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                                    <td className="font-bold text-slate-900 dark:text-white uppercase tracking-tighter">
+                                                        <div className="flex items-center gap-4">
+                                                            <img src={product.imageUrl} alt={product.name} className="w-11 h-11 rounded-xl object-cover border-2 border-slate-50 shadow-sm" />
+                                                            <span className="text-sm">{product.name}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="text-slate-500 font-bold tabular-nums">
+                                                        {formatCurrency(product.price, receiptSettings.currencySymbol)}
+                                                    </td>
+                                                    <td>
+                                                        {editingState.id === product.id ? (
+                                                            <div className="flex items-center gap-3">
+                                                                <input
+                                                                    type="number"
+                                                                    value={editingState.value}
+                                                                    onChange={(e) => setEditingState({ ...editingState, value: e.target.value })}
+                                                                    className="w-24 bg-white border-2 border-primary rounded-xl px-3 py-2 text-sm font-black tabular-nums outline-none shadow-lg"
+                                                                    autoFocus
+                                                                    min="0"
+                                                                    step="0.1"
+                                                                />
+                                                                <button onClick={() => handleSaveClick(product.id)} className="text-[10px] font-black uppercase text-emerald-600 hover:underline">Commit</button>
+                                                                <button onClick={handleCancelClick} className="text-[10px] font-black uppercase text-slate-400 hover:underline">Abort</button>
+                                                            </div>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={() => handleEditClick(product)} 
+                                                                className="group flex items-center gap-4 text-slate-900 dark:text-white"
+                                                            >
+                                                                <span className="text-xl font-black tabular-nums">{product.commissionPercentage}%</span>
+                                                                <span className="text-[9px] font-black uppercase tracking-widest text-primary opacity-0 group-hover:opacity-100 transition-all">Edit Rate</span>
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
-                            <div className="mt-3 pt-3 border-t">
-                                <label className="text-sm font-medium text-gray-700">Commission Rate (%)</label>
-                                {editingState.id === product.id ? (
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <input
-                                            type="number"
-                                            value={editingState.value}
-                                            onChange={(e) => setEditingState({ ...editingState, value: e.target.value })}
-                                            className="w-24 px-2 py-1 border border-primary rounded-md shadow-sm"
-                                            autoFocus
-                                            min="0" step="0.1"
-                                        />
-                                        <button onClick={() => handleSaveClick(product.id)} className="text-sm font-semibold text-green-600 hover:text-green-800">Save</button>
-                                        <button onClick={handleCancelClick} className="text-sm font-semibold text-gray-500 hover:text-gray-700">Cancel</button>
+                            <div className="md:hidden space-y-4">
+                                {products.map(product => (
+                                    <div key={product.id} className="bg-slate-50 dark:bg-gray-800 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-gray-700">
+                                        <div className="flex items-center gap-4 mb-4">
+                                            <img src={product.imageUrl} alt={product.name} className="w-16 h-16 rounded-2xl object-cover border-4 border-white shadow-md" />
+                                            <div>
+                                                <p className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">{product.name}</p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{formatCurrency(product.price, receiptSettings.currencySymbol)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="pt-4 border-t dark:border-gray-700">
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">Protocol Yield</label>
+                                            {editingState.id === product.id ? (
+                                                <div className="flex items-center gap-3">
+                                                    <input
+                                                        type="number"
+                                                        value={editingState.value}
+                                                        onChange={(e) => setEditingState({ ...editingState, value: e.target.value })}
+                                                        className="flex-1 bg-white border-2 border-primary rounded-xl px-4 py-3 text-lg font-black tabular-nums outline-none"
+                                                        autoFocus
+                                                    />
+                                                    <button onClick={() => handleSaveClick(product.id)} className="bg-emerald-500 text-white px-5 py-3 rounded-xl font-black text-[10px] uppercase">OK</button>
+                                                </div>
+                                            ) : (
+                                                <button onClick={() => handleEditClick(product)} className="w-full flex justify-between items-center py-2">
+                                                    <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{product.commissionPercentage}%</span>
+                                                    <span className="text-[10px] font-black uppercase text-primary">Modify Rate</span>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                ) : (
-                                    <div className="flex items-center gap-4 mt-1">
-                                        <span className="font-medium text-gray-800">{product.commissionPercentage}%</span>
-                                        <button onClick={() => handleEditClick(product)} className="text-sm font-medium text-primary hover:underline">Edit</button>
-                                    </div>
-                                )}
+                                ))}
                             </div>
-                        </div>
-                    ))}
+                        </>
+                    ) : (
+                        <EmptyState 
+                            icon={<InventoryIcon />} 
+                            title="Inventory Registry Empty" 
+                            description="Enroll products into the digital ledger before configuring yield protocols."
+                            action={{ label: "Go to Inventory", onClick: () => navigate('/inventory') }}
+                        />
+                    )}
                 </div>
-                {products.length === 0 && (
-                    <div className="text-center py-10">
-                        <p className="text-gray-500">No products found. Add products in the inventory page first.</p>
-                    </div>
-                )}
             </div>
-        </Card>
+        </div>
     );
 };
 

@@ -1,8 +1,19 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Product, CartItem, ReceiptSettingsData } from '../types';
 import { formatCurrency } from '../lib/utils';
-import { CloseIcon } from '../constants';
+import ModalShell from './ModalShell';
 
+const getEffectivePrice = (product: Product, quantity: number): number => {
+    if (!product) return 0;
+    const basePrice = Number(product.price) || 0;
+    if (!product.tieredPricing || product.tieredPricing.length === 0) {
+        return basePrice;
+    }
+    const sortedTiers = [...product.tieredPricing].sort((a, b) => b.quantity - a.quantity);
+    const applicableTier = sortedTiers.find(tier => quantity >= tier.quantity);
+    return applicableTier ? (Number(applicableTier.price) || 0) : basePrice;
+};
 
 const QuantityModal: React.FC<{
     isOpen: boolean;
@@ -27,9 +38,7 @@ const QuantityModal: React.FC<{
         }
     }, [isOpen, initialQuantity]);
 
-    if (!isOpen || !product) return null;
-
-    const handleIncrement = () => setQuantity(q => Math.min(product.stock, (Number(q) || 0) + 1));
+    const handleIncrement = () => setQuantity(q => Math.min(product?.stock || 0, (Number(q) || 0) + 1));
     const handleDecrement = () => setQuantity(q => Math.max(1, (Number(q) || 1) - 1));
     
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,50 +49,80 @@ const QuantityModal: React.FC<{
     };
 
     const handleBlur = () => {
+        if (!product) return;
         const num = parseInt(String(quantity)) || 1;
         setQuantity(Math.max(1, Math.min(product.stock, num)));
     };
 
     const handleConfirmClick = () => {
-        onConfirm(product, Number(quantity) || 1);
+        if (product) onConfirm(product, Number(quantity) || 1);
     };
 
+    const effectiveUnitPrice = useMemo(() => {
+        if (!product) return 0;
+        return getEffectivePrice(product, Number(quantity) || 0);
+    }, [product, quantity]);
+
+    const isBulkApplied = useMemo(() => {
+        if (!product) return false;
+        return effectiveUnitPrice !== Number(product.price);
+    }, [product, effectiveUnitPrice]);
+
+    const footer = (
+        <button onClick={handleConfirmClick} className="btn-base btn-primary w-full py-5 text-sm">
+            Synchronize to Cart
+        </button>
+    );
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onClose} role="dialog" aria-modal="true">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs" onClick={e => e.stopPropagation()}>
-                <header className="p-4 border-b flex justify-between items-center">
-                    <h3 className="text-lg font-bold text-gray-800 truncate">{product.name}</h3>
-                     <button onClick={onClose} className="p-1 rounded-full text-gray-500 hover:bg-gray-100" aria-label="Close">
-                        <CloseIcon />
+        <ModalShell 
+            isOpen={isOpen} 
+            onClose={onClose} 
+            title={product?.name || 'Set Quantity'} 
+            description="Terminal Inventory Adjustment"
+            maxWidth="max-w-sm"
+            footer={footer}
+        >
+            <div className="text-center py-4">
+                <div className="mb-8">
+                    <p className={`text-4xl font-black tabular-nums transition-colors ${isBulkApplied ? 'text-emerald-500' : 'text-primary'}`}>
+                        {formatCurrency(effectiveUnitPrice, receiptSettings.currencySymbol)}
+                    </p>
+                    {isBulkApplied && (
+                        <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mt-1 animate-pulse">Bulk Rate Protocol Active</p>
+                    )}
+                </div>
+                <div className="flex items-center justify-center gap-4">
+                    <button 
+                        onClick={handleDecrement} 
+                        className="w-16 h-16 rounded-3xl border-2 border-slate-100 text-3xl font-black text-slate-400 hover:bg-slate-50 transition-all active:scale-90"
+                        disabled={Number(quantity) <= 1}
+                    >
+                        -
                     </button>
-                </header>
-                <main className="p-6 text-center">
-                    <p className="text-2xl font-bold text-primary mb-4">{formatCurrency(product.price, receiptSettings.currencySymbol)}</p>
-                    <label htmlFor="quantity-input" className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-                    <div className="flex items-center justify-center gap-2">
-                        <button onClick={handleDecrement} className="w-12 h-12 rounded-full border text-2xl font-bold text-primary hover:bg-gray-100 transition-colors disabled:opacity-50" disabled={Number(quantity) <= 1}>-</button>
-                        <input
-                            id="quantity-input"
-                            type="number"
-                            value={quantity}
-                            onBlur={handleBlur}
-                            onChange={handleInputChange}
-                            className="w-20 h-12 text-center text-xl font-bold border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
-                            min="1"
-                            max={product.stock}
-                            aria-label="Item quantity"
-                        />
-                        <button onClick={handleIncrement} className="w-12 h-12 rounded-full border text-2xl font-bold text-primary hover:bg-gray-100 transition-colors disabled:opacity-50" disabled={Number(quantity) >= product.stock}>+</button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">{product.stock} available</p>
-                </main>
-                <footer className="p-4 bg-gray-50 rounded-b-2xl">
-                    <button onClick={handleConfirmClick} className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-lg">
-                        Add to Cart
+                    <input
+                        id="quantity-input"
+                        type="number"
+                        value={quantity}
+                        onBlur={handleBlur}
+                        onChange={handleInputChange}
+                        onFocus={(e) => e.target.select()}
+                        className="w-24 h-16 text-center text-3xl font-black bg-slate-50 dark:bg-gray-900 border-none rounded-3xl focus:ring-4 focus:ring-primary/10 outline-none tabular-nums"
+                        min="1"
+                    />
+                    <button 
+                        onClick={handleIncrement} 
+                        className="w-16 h-16 rounded-3xl border-2 border-slate-100 text-3xl font-black text-slate-400 hover:bg-slate-50 transition-all active:scale-90"
+                        disabled={product ? Number(quantity) >= product.stock : false}
+                    >
+                        +
                     </button>
-                </footer>
+                </div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-8">
+                    Verified Stock: <span className="text-slate-900 dark:text-white">{product?.stock || 0} Units</span>
+                </p>
             </div>
-        </div>
+        </ModalShell>
     );
 };
 

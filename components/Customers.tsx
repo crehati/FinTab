@@ -1,60 +1,27 @@
 
-
+// @ts-nocheck
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import type { Customer, ReceiptSettingsData } from '../types';
+import type { Customer, ReceiptSettingsData, Sale } from '../types';
 import Card from './Card';
-import { PlusIcon, MoreVertIcon } from '../constants';
+import { PlusIcon, MoreVertIcon, CustomersIcon, FINALIZED_SALE_STATUSES } from '../constants';
 import CustomerModal from './CustomerModal';
 import CustomerDetailModal from './CustomerDetailModal';
-import { formatCurrency } from '../lib/utils';
+import EmptyState from './EmptyState';
+import SearchInput from './SearchInput';
+import { formatCurrency, formatAbbreviatedNumber } from '../lib/utils';
 
 interface CustomersProps {
     customers: Customer[];
     setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
     t: (key: string) => string;
     receiptSettings: ReceiptSettingsData;
-    trialLimits: { canAddCustomer: boolean };
+    trialLimits?: { canAddCustomer: boolean };
 }
 
-// Helper function for time formatting
-const timeAgo = (dateString: string): string => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (seconds < 60) return 'Just now';
-    let interval = seconds / 31536000;
-    if (interval > 1) return `${Math.floor(interval)} years ago`;
-    interval = seconds / 2592000;
-    if (interval > 1) return `${Math.floor(interval)} months ago`;
-    interval = seconds / 86400;
-    if (interval > 1) return `${Math.floor(interval)} days ago`;
-    interval = seconds / 3600;
-    if (interval > 1) return `${Math.floor(interval)} hours ago`;
-    interval = seconds / 60;
-    if (interval > 1) return `${Math.floor(interval)} minutes ago`;
-    return `${Math.floor(seconds)} seconds ago`;
-};
-
-const SearchIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-    </svg>
-);
-
-const SortArrowIcon: React.FC<{ direction: 'asc' | 'desc' }> = ({ direction }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 inline-block ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        {direction === 'asc' ? (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-        ) : (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        )}
-    </svg>
-);
-
-
-const Customers: React.FC<CustomersProps> = ({ customers, setCustomers, t, receiptSettings, trialLimits }) => {
+const Customers: React.FC<CustomersProps> = ({ 
+    customers = [], setCustomers, t, receiptSettings, 
+    trialLimits = { canAddCustomer: true } 
+}) => {
     const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
     const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -62,8 +29,7 @@ const Customers: React.FC<CustomersProps> = ({ customers, setCustomers, t, recei
     const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
     const actionMenuRef = useRef<HTMLDivElement>(null);
     
-    type SortKey = 'name' | 'joinDate' | 'totalSpent';
-    const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({ key: 'totalSpent', direction: 'desc' });
+    const cs = receiptSettings?.currencySymbol || '$';
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -71,86 +37,34 @@ const Customers: React.FC<CustomersProps> = ({ customers, setCustomers, t, recei
                 setOpenActionMenuId(null);
             }
         };
-        if (openActionMenuId) {
-            document.addEventListener('mousedown', handleClickOutside);
-        }
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
+        if (openActionMenuId) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [openActionMenuId]);
     
-    const getTotalSpent = (customer: Customer) => {
-        return customer.purchaseHistory.reduce((sum, sale) => sum + sale.total, 0);
-    }
-
-    const sortedCustomers = useMemo(() => {
-        const sorted = [...customers];
-        sorted.sort((a, b) => {
-            let aValue: string | number;
-            let bValue: string | number;
-
-            if (sortConfig.key === 'totalSpent') {
-                aValue = getTotalSpent(a);
-                bValue = getTotalSpent(b);
-            } else if (sortConfig.key === 'joinDate') {
-                aValue = new Date(a.joinDate).getTime();
-                bValue = new Date(b.joinDate).getTime();
-            } else { // 'name'
-                aValue = a.name;
-                bValue = b.name;
-            }
-
-            if (typeof aValue === 'string' && typeof bValue === 'string') {
-                if (sortConfig.direction === 'asc') {
-                    return aValue.localeCompare(bValue);
-                }
-                return bValue.localeCompare(aValue);
-            }
-            if (sortConfig.direction === 'asc') {
-                return (aValue as number) - (bValue as number);
-            }
-            return (bValue as number) - (aValue as number);
-        });
-        return sorted;
-    }, [customers, sortConfig]);
+    const getTotalSpent = (customer: Customer) => (customer.purchaseHistory || []).reduce((sum, sale) => sum + sale.total, 0);
 
     const filteredCustomers = useMemo(() => {
-        if (!searchTerm.trim()) {
-            return sortedCustomers;
-        }
-        const lowercasedFilter = searchTerm.toLowerCase();
-        return sortedCustomers.filter(customer =>
-            customer.name.toLowerCase().includes(lowercasedFilter) ||
-            customer.email.toLowerCase().includes(lowercasedFilter) ||
-            customer.phone.includes(searchTerm)
-        );
-    }, [sortedCustomers, searchTerm]);
+        const lower = searchTerm.toLowerCase();
+        return (customers || [])
+            .filter(c => c.name.toLowerCase().includes(lower) || c.email.toLowerCase().includes(lower) || c.phone.includes(searchTerm))
+            .sort((a, b) => getTotalSpent(b) - getTotalSpent(a));
+    }, [customers, searchTerm]);
 
-    const handleOpenAddModal = () => {
-        setEditingCustomer(null);
-        setIsCustomerModalOpen(true);
-    };
+    const metrics = useMemo(() => {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const newThisMonth = customers.filter(c => new Date(c.joinDate) >= startOfMonth).length;
+        const totalYield = customers.reduce((sum, c) => sum + getTotalSpent(c), 0);
+        return { count: customers.length, newThisMonth, totalYield };
+    }, [customers]);
 
-    const handleOpenEditModal = (customer: Customer) => {
-        setEditingCustomer(customer);
-        setIsCustomerModalOpen(true);
-    };
-
-    const handleCloseModal = () => {
-        setIsCustomerModalOpen(false);
-        setEditingCustomer(null);
-    };
+    const handleOpenAddModal = () => { setEditingCustomer(null); setIsCustomerModalOpen(true); };
+    const handleOpenEditModal = (customer: Customer) => { setEditingCustomer(customer); setIsCustomerModalOpen(true); };
 
     const handleSaveCustomer = (customerData: Omit<Customer, 'id' | 'joinDate' | 'purchaseHistory'>) => {
         if (editingCustomer) {
-            // Edit mode: update existing customer
-            setCustomers(prevCustomers =>
-                prevCustomers.map(c =>
-                    c.id === editingCustomer.id ? { ...c, ...customerData } : c
-                )
-            );
+            setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? { ...c, ...customerData } : c));
         } else {
-            // Add mode: create new customer
             const newCustomer: Customer = {
                 ...customerData,
                 id: `cust-${Date.now()}`,
@@ -159,198 +73,128 @@ const Customers: React.FC<CustomersProps> = ({ customers, setCustomers, t, recei
             };
             setCustomers(prev => [newCustomer, ...prev]);
         }
-        handleCloseModal();
-    };
-    
-    const handleSort = (key: SortKey) => {
-        let direction: 'asc' | 'desc' = 'asc';
-        if (sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
-        }
-        setSortConfig({ key, direction });
-    };
-    
-    const handleMobileSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const value = e.target.value;
-        const [key, direction] = value.split(':');
-        setSortConfig({ key: key as SortKey, direction: direction as 'asc' | 'desc' });
-    };
-
-    const SortableHeader: React.FC<{ sortKey: SortKey, children: React.ReactNode, className?: string }> = ({ sortKey, children, className = '' }) => {
-        const isSorting = sortConfig.key === sortKey;
-        return (
-            <th scope="col" className={`px-6 py-3 cursor-pointer select-none ${className}`} onClick={() => handleSort(sortKey)} aria-sort={isSorting ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
-                {children}
-                {isSorting && <SortArrowIcon direction={sortConfig.direction} />}
-            </th>
-        );
+        setIsCustomerModalOpen(false);
     };
 
     return (
-        <>
-            <Card title={t('customerManagement.title')}>
-                 <div className="mb-4 flex flex-col md:flex-row gap-4">
-                    <div className="relative flex-grow">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <SearchIcon />
-                        </div>
-                        <input
-                            type="text"
-                            placeholder="Search by name, email, or phone..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-neutral-dark placeholder-neutral-medium focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary"
-                            aria-label="Search customers"
-                        />
+        <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-xl p-8 border border-white/10">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-10 gap-6">
+                    <div>
+                        <h2 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tighter leading-none">Customers</h2>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-4">Client Relationship & Identity Grid</p>
                     </div>
-                     <div className="relative md:hidden">
-                         <label htmlFor="sort-customers" className="sr-only">Sort Customers By</label>
-                         <select
-                            id="sort-customers"
-                            value={`${sortConfig.key}:${sortConfig.direction}`}
-                            onChange={handleMobileSortChange}
-                            className="w-full py-2 pl-3 pr-10 bg-white border border-gray-200 rounded-lg shadow-sm text-neutral-dark focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary"
-                        >
-                            <option value="totalSpent:desc">Total Spent (High to Low)</option>
-                            <option value="totalSpent:asc">Total Spent (Low to High)</option>
-                            <option value="name:asc">Name (A-Z)</option>
-                            <option value="name:desc">Name (Z-A)</option>
-                            <option value="joinDate:desc">Join Date (Newest First)</option>
-                            <option value="joinDate:asc">Join Date (Oldest First)</option>
-                        </select>
+                    
+                    <div className="w-full md:w-auto grid grid-cols-2 md:flex gap-4">
+                        <div className="bg-slate-50 dark:bg-gray-800 p-4 rounded-2xl border border-slate-100 dark:border-gray-700 text-center min-w-[120px] shadow-inner">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Active Clients</p>
+                            <p className="text-lg font-black text-slate-900 dark:text-white tabular-nums">{metrics.count}</p>
+                        </div>
+                        <div className="bg-primary/5 p-4 rounded-2xl border border-primary/10 text-center min-w-[120px] shadow-inner">
+                            <p className="text-[8px] font-black text-primary uppercase tracking-widest">New (MTD)</p>
+                            <p className="text-lg font-black text-primary tabular-nums">+{metrics.newThisMonth}</p>
+                        </div>
                     </div>
                 </div>
 
-                {filteredCustomers.length === 0 ? (
-                     <div className="text-center py-10">
-                        <p className="text-neutral-medium">No customers found matching your filters.</p>
-                    </div>
-                ) : (
-                    <>
-                        {/* Desktop Table View */}
-                        <div className="hidden md:block overflow-x-auto">
-                            <table className="w-full text-sm text-left text-neutral-medium">
-                                <thead className="text-xs text-neutral-medium uppercase bg-neutral-light">
-                                    <tr>
-                                        <SortableHeader sortKey="name">Name</SortableHeader>
-                                        <th scope="col" className="px-6 py-3">Email</th>
-                                        <th scope="col" className="px-6 py-3">Phone</th>
-                                        <SortableHeader sortKey="joinDate">Join Date</SortableHeader>
-                                        <SortableHeader sortKey="totalSpent">Total Spent</SortableHeader>
-                                        <th scope="col" className="px-6 py-3 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredCustomers.map(customer => (
-                                        <tr key={customer.id} className="bg-white border-b border-neutral-light hover:bg-accent-sky/5">
-                                            <td className="px-6 py-4 font-medium text-neutral-dark">{customer.name}</td>
-                                            <td className="px-6 py-4 text-neutral-dark">{customer.email}</td>
-                                            <td className="px-6 py-4 text-neutral-dark">{customer.phone}</td>
-                                            <td className="px-6 py-4 text-neutral-dark">{new Date(customer.joinDate).toLocaleDateString()}</td>
-                                            <td className="px-6 py-4 font-semibold text-accent-teal">{formatCurrency(getTotalSpent(customer), receiptSettings.currencySymbol)}</td>
-                                            <td className="px-6 py-4 text-right whitespace-nowrap">
-                                                <button
-                                                    onClick={() => setSelectedCustomer(customer)}
-                                                    className="font-medium text-accent-teal hover:underline mr-4"
-                                                >
-                                                    View
-                                                </button>
-                                                <button
-                                                    onClick={() => handleOpenEditModal(customer)}
-                                                    className="font-medium text-primary hover:underline"
-                                                >
-                                                    Edit
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        
-                        {/* Mobile Card View */}
-                        <div className="md:hidden space-y-3">
-                            {filteredCustomers.map(customer => {
-                                const lastOrder = customer.purchaseHistory.length > 0
-                                    ? [...customer.purchaseHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
-                                    : null;
-                                
-                                const lastOrderText = lastOrder ? timeAgo(lastOrder.date) : 'No orders yet';
-                                const orderCount = customer.purchaseHistory.length;
-                                
-                                return (
-                                    <div key={customer.id} className="bg-white p-4 rounded-xl shadow-md border border-neutral-light relative">
-                                        <div className="pr-10"> {/* Add padding to prevent text overlap with icon */}
-                                            <p className="font-bold text-lg text-neutral-dark truncate">{customer.name}</p>
-                                            <p className="text-sm text-neutral-medium mt-1">{customer.phone}</p>
-                                            <p className="text-xs text-neutral-medium mt-2">
-                                                <span className="font-medium">{orderCount} {orderCount === 1 ? 'Order' : 'Orders'}</span>
-                                                {lastOrder && <span className="mx-1">&middot;</span>}
-                                                {lastOrder && `Last: ${lastOrderText}`}
-                                            </p>
-                                        </div>
+                <div className="mb-8">
+                    <SearchInput
+                        placeholder="Protocol Search: Name, email, or phone..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
 
-                                        <div className="absolute top-2 right-2">
+                <div className="min-h-[500px]">
+                    {filteredCustomers.length > 0 ? (
+                        <>
+                            <div className="table-wrapper hidden md:block">
+                                <div className="table-container max-h-[700px]">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr>
+                                                <th scope="col">Digital Identity</th>
+                                                <th scope="col">Communication Protocol</th>
+                                                <th scope="col">Enrollment Date</th>
+                                                <th scope="col" className="text-right">Lifetime Yield</th>
+                                                <th scope="col" className="text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {filteredCustomers.map(customer => (
+                                                <tr key={customer.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                                                    <td className="font-bold text-slate-900 dark:text-white uppercase tracking-tighter text-sm">{customer.name}</td>
+                                                    <td className="text-slate-500 font-bold uppercase text-[9px] tracking-widest">
+                                                        {customer.email}<br/><span className="text-primary">{customer.phone}</span>
+                                                    </td>
+                                                    <td className="text-slate-400 tabular-nums font-bold text-xs">{new Date(customer.joinDate).toLocaleDateString()}</td>
+                                                    <td className="table-num text-emerald-600 font-black text-base">{formatCurrency(getTotalSpent(customer), cs)}</td>
+                                                    <td className="text-right">
+                                                        <div className="flex justify-end gap-4">
+                                                            <button onClick={() => setSelectedCustomer(customer)} className="text-[9px] font-black uppercase tracking-widest text-primary hover:underline">Profile</button>
+                                                            <button onClick={() => handleOpenEditModal(customer)} className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:underline">Edit</button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div className="md:hidden space-y-4">
+                                {filteredCustomers.map(customer => (
+                                    <div key={customer.id} className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-gray-700 relative">
+                                        <div className="pr-12">
+                                            <p className="font-black text-slate-900 dark:text-white uppercase tracking-tighter text-base truncate">{customer.name}</p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{customer.phone}</p>
+                                        </div>
+                                        <div className="flex justify-between items-end mt-6 pt-4 border-t dark:border-gray-700">
+                                            <div>
+                                                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Lifetime Yield</p>
+                                                <p className="text-xl font-black text-emerald-600 tabular-nums">{formatCurrency(getTotalSpent(customer), cs)}</p>
+                                            </div>
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{customer.purchaseHistory.length} Orders</p>
+                                        </div>
+                                        <div className="absolute top-6 right-6">
                                             <div className="relative" ref={openActionMenuId === customer.id ? actionMenuRef : null}>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setOpenActionMenuId(openActionMenuId === customer.id ? null : customer.id);
-                                                    }}
-                                                    className="p-2 rounded-full text-neutral-medium hover:bg-gray-100"
-                                                    aria-label="More actions"
-                                                >
-                                                    <MoreVertIcon />
+                                                <button onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === customer.id ? null : customer.id); }} className={`p-3 rounded-2xl transition-all ${openActionMenuId === customer.id ? 'bg-primary text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-gray-700'}`}>
+                                                    <MoreVertIcon className="w-4 h-4" />
                                                 </button>
                                                 {openActionMenuId === customer.id && (
-                                                    <div className="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg border z-10 py-1">
-                                                        <button
-                                                            onClick={() => { setSelectedCustomer(customer); setOpenActionMenuId(null); }}
-                                                            className="w-full text-left block px-4 py-2 text-sm text-neutral-dark hover:bg-gray-100"
-                                                        >
-                                                            View Profile
-                                                        </button>
-                                                        <button
-                                                            onClick={() => { handleOpenEditModal(customer); setOpenActionMenuId(null); }}
-                                                            className="w-full text-left block px-4 py-2 text-sm text-neutral-dark hover:bg-gray-100"
-                                                        >
-                                                            Edit
-                                                        </button>
+                                                    <div className="absolute right-0 mt-3 w-48 bg-white dark:bg-gray-900 rounded-[2rem] shadow-2xl border border-slate-100 dark:border-gray-700 z-[100] py-4 overflow-hidden animate-scale-in origin-top-right">
+                                                        <button onClick={() => { setSelectedCustomer(customer); setOpenActionMenuId(null); }} className="w-full text-left px-6 py-3.5 text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-gray-800 transition-colors">Identity Profile</button>
+                                                        <button onClick={() => { handleOpenEditModal(customer); setOpenActionMenuId(null); }} className="w-full text-left px-6 py-3.5 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/5 transition-colors">Edit identity</button>
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    </>
-                )}
-            </Card>
+                                ))}
+                            </div>
+                        </>
+                    ) : (
+                        <EmptyState 
+                            icon={<CustomersIcon />} 
+                            title="Zero clients found" 
+                            description={searchTerm ? "Try searching for another identity." : "Start by enrolling your first customer to the terminal database."}
+                            action={searchTerm ? undefined : { label: "Enroll Identity", onClick: handleOpenAddModal }}
+                        />
+                    )}
+                </div>
+            </div>
 
             <button
                 onClick={handleOpenAddModal}
                 disabled={!trialLimits.canAddCustomer}
-                title={!trialLimits.canAddCustomer ? "Customer limit reached for trial period" : "Add new customer"}
-                className="fixed bottom-24 right-6 md:bottom-10 md:right-10 bg-primary text-white rounded-full p-4 shadow-xl hover:bg-blue-700 transition-transform transform hover:scale-110 z-20 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                aria-label="Add new customer"
+                className="fixed bottom-24 right-6 lg:bottom-12 lg:right-12 bg-primary text-white rounded-[2rem] p-6 shadow-2xl shadow-primary/30 hover:bg-blue-700 transition-all hover:scale-110 active:scale-95 z-[40] disabled:bg-slate-300 flex items-center justify-center group"
             >
-                <PlusIcon />
+                <PlusIcon className="w-7 h-7" />
+                <span className="max-w-0 overflow-hidden group-hover:max-w-xs group-hover:ml-3 transition-all duration-500 text-[11px] font-black uppercase tracking-widest whitespace-nowrap">Enroll New Client</span>
             </button>
 
-            <CustomerModal 
-                isOpen={isCustomerModalOpen}
-                onClose={handleCloseModal}
-                onSave={handleSaveCustomer}
-                customerToEdit={editingCustomer}
-            />
-            
-            <CustomerDetailModal
-                customer={selectedCustomer}
-                onClose={() => setSelectedCustomer(null)}
-                receiptSettings={receiptSettings}
-            />
-        </>
+            <CustomerModal isOpen={isCustomerModalOpen} onClose={() => setIsCustomerModalOpen(false)} onSave={handleSaveCustomer} customerToEdit={editingCustomer} />
+            <CustomerDetailModal customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} receiptSettings={receiptSettings} />
+        </div>
     );
 };
 

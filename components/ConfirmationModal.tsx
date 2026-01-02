@@ -1,4 +1,7 @@
+
 import React from 'react';
+import ModalShell from './ModalShell';
+import { WarningIcon } from '../constants';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -6,58 +9,97 @@ interface ConfirmationModalProps {
   onConfirm: () => void;
   title: string;
   message: string;
+  amount?: number | string;
+  currencySymbol?: string;
+  variant?: 'primary' | 'danger';
+  isIrreversible?: boolean;
+  isProcessing?: boolean;
+  confirmLabel?: string;
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, onConfirm, title, message }) => {
-  if (!isOpen) return null;
+const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    onConfirm, 
+    title, 
+    message, 
+    amount, 
+    currencySymbol = '$',
+    variant = 'primary',
+    isIrreversible = false,
+    isProcessing = false,
+    confirmLabel = 'Confirm Action'
+}) => {
+  const isDanger = variant === 'danger';
 
-  const handleConfirm = () => {
-    onConfirm();
-    onClose();
-  };
+  const footer = (
+    <>
+      <button
+        type="button"
+        className={`btn-base w-full sm:w-auto px-10 py-5 text-sm ${isDanger ? 'bg-rose-600 text-white hover:bg-rose-700' : 'btn-primary'}`}
+        onClick={onConfirm}
+        disabled={isProcessing}
+      >
+        {isProcessing && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>}
+        {confirmLabel}
+      </button>
+      <button
+        type="button"
+        className="btn-base btn-secondary w-full sm:w-auto px-10 py-5 text-sm"
+        onClick={onClose}
+        disabled={isProcessing}
+      >
+        Abort Protocol
+      </button>
+    </>
+  );
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div className="bg-white rounded-lg shadow-2xl max-w-md w-full m-4">
-        <div className="p-6">
-          <div className="sm:flex sm:items-start">
-            <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-              <svg className="h-6 w-6 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+    <ModalShell 
+        isOpen={isOpen} 
+        onClose={onClose} 
+        title={title} 
+        maxWidth="max-w-md"
+        footer={footer}
+    >
+        <div className="flex flex-col items-center text-center">
+            {/* Icon Section */}
+            <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mb-6 ${
+                isDanger ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/30' : 'bg-primary/10 text-primary dark:bg-primary/20'
+            }`}>
+                {isDanger ? <WarningIcon className="w-10 h-10" /> : (
+                    <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                )}
             </div>
-            <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-              <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
-                {title}
-              </h3>
-              <div className="mt-2">
-                <p className="text-sm text-gray-500">
-                  {message}
-                </p>
-              </div>
-            </div>
-          </div>
+            
+            {/* Value Section */}
+            {amount !== undefined && (
+                <div className="mb-6 p-6 bg-slate-50 dark:bg-gray-800 rounded-[2rem] border border-slate-100 dark:border-gray-700 w-full shadow-inner">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Verified Valuation</p>
+                    <p className={`text-4xl font-black tabular-nums tracking-tighter ${isDanger ? 'text-rose-600' : 'text-primary'}`}>
+                        {typeof amount === 'number' ? `${currencySymbol}${amount.toFixed(2)}` : amount}
+                    </p>
+                </div>
+            )}
+
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed mb-6">
+                {message}
+            </p>
+
+            {isIrreversible && (
+                <div className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest border ${
+                    isDanger 
+                    ? 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-900/50' 
+                    : 'bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-900/50'
+                }`}>
+                    <WarningIcon className="w-4 h-4" />
+                    Protocol Lock: Irreversible
+                </div>
+            )}
         </div>
-        <div className="bg-gray-50 px-4 py-3 rounded-b-lg flex sm:justify-center">
-          <div className="responsive-btn-group sm:flex-row-reverse">
-            <button
-              type="button"
-              className="bg-red-600 text-white hover:bg-red-700"
-              onClick={handleConfirm}
-            >
-              Delete
-            </button>
-            <button
-              type="button"
-              className="bg-gray-200 text-gray-800 hover:bg-gray-300"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 };
 

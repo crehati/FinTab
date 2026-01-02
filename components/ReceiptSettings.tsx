@@ -1,145 +1,128 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import type { ReceiptSettingsData, Sale, Customer, User, Product } from '../types';
 import Card from './Card';
+import { formatCurrency } from '../lib/utils';
 
 // Create a detailed dummy sale object for a realistic preview
-const DUMMY_PREVIEW_PRODUCT_1: Product = { id: 'prev-1', name: 'Artisan Sourdough Loaf', description: 'Naturally leavened bread.', category: 'Bakery', price: 6.50, costPrice: 2.50, stock: 1, imageUrl: '', commissionPercentage: 0 };
-const DUMMY_PREVIEW_PRODUCT_2: Product = { id: 'prev-2', name: 'Gourmet Coffee Beans (Extra Long Name To Test Wrapping)', description: 'Single-origin, medium roast.', category: 'Pantry', price: 25.00, costPrice: 15.00, stock: 1, imageUrl: '', commissionPercentage: 0 };
-const DUMMY_PREVIEW_CUSTOMER: Customer = { id: 'prev-cust', name: 'Jane Doe (Customer)', email: '', phone: '(555) 123-4567', joinDate: '', purchaseHistory: [] };
-const DUMMY_PREVIEW_USER: User = { id: 'prev-user', name: 'John Smith (Cashier)', role: 'Cashier', email: '', avatarUrl: '', type: 'commission' };
+const DUMMY_PREVIEW_PRODUCT_1: Product = { id: 'prev-1', name: 'Savon', description: 'Sample Item', category: 'General', price: 9.00, costPrice: 2.50, stock: 10, imageUrl: '', commissionPercentage: 0 };
+const DUMMY_PREVIEW_CUSTOMER: Customer = { id: 'prev-cust', name: 'Benson Jean', email: '', phone: '+19522129810', joinDate: '', purchaseHistory: [] };
+const DUMMY_PREVIEW_USER: User = { id: 'prev-user', name: 'Demo User', role: 'Cashier', email: '', avatarUrl: '', type: 'commission' };
 
-// FIX: Changed 'customer' and 'user' properties to 'customerId' and 'userId' to conform to the 'Sale' type.
 const DUMMY_SALE_FOR_PREVIEW: Sale = {
-    id: 'sale-preview',
+    id: 'RE504278',
     date: new Date().toISOString(),
     items: [
-        { product: DUMMY_PREVIEW_PRODUCT_1, quantity: 2 },
-        { product: DUMMY_PREVIEW_PRODUCT_2, quantity: 1 }
+        { product: DUMMY_PREVIEW_PRODUCT_1, quantity: 10, stock: DUMMY_PREVIEW_PRODUCT_1.stock }
     ],
     customerId: DUMMY_PREVIEW_CUSTOMER.id,
     userId: DUMMY_PREVIEW_USER.id,
-    subtotal: (6.50 * 2) + 25.00,
-    tax: ((((6.50 * 2) + 25.00) - 5.00) * 0.08),
-    discount: 5.00,
-    total: (((6.50 * 2) + 25.00) - 5.00) * 1.08,
+    subtotal: 90.00,
+    tax: 0,
+    discount: 0,
+    total: 90.00,
     paymentMethod: 'Cash',
-    status: 'completed'
+    status: 'completed',
+    cashReceived: 100.00,
+    change: 10.00
 };
 
-
-// Simplified receipt preview component
 const ReceiptPreview: React.FC<{ settings: ReceiptSettingsData; isProforma: boolean }> = ({ settings, isProforma }) => {
     const cs = settings.currencySymbol || '$';
-    const sale = DUMMY_SALE_FOR_PREVIEW; // Use the detailed dummy sale
-    // FIX: Directly use the dummy customer and user objects for preview data, as they are available in this scope.
-    const customer = DUMMY_PREVIEW_CUSTOMER;
-    const user = DUMMY_PREVIEW_USER;
-    const totalItems = sale.items.length;
-    const totalUnits = sale.items.reduce((sum, item) => sum + item.quantity, 0);
+    const labels = settings.labels;
+    const sale = DUMMY_SALE_FOR_PREVIEW;
 
     return (
-        <div className="p-4 border rounded-lg font-sans text-gray-800 bg-white shadow-inner h-full overflow-y-auto max-w-[280px] mx-auto text-[10px]" style={{ fontFamily: 'Arial, sans-serif' }}>
-            {/* Header */}
-            <div className="text-center mb-2 pt-4">
-                {settings.logo ? (
-                    <img src={settings.logo} alt="Logo Preview" className="w-16 h-auto mx-auto mb-2 object-contain" />
-                ) : (
-                    <div className="w-12 h-12 bg-gray-200 mx-auto mb-2 flex items-center justify-center text-gray-400 text-[8px]">Logo</div>
-                )}
-                <h2 className="text-base font-bold">{settings.businessName}</h2>
-                <p className="text-[9px] italic text-gray-600">{settings.slogan}</p>
-                <p className="text-[9px] mt-1">{settings.address}</p>
-                <p className="text-[9px]">{settings.phone}</p>
-                {!isProforma && <p className="text-[8px] mt-1">Sold by: {user.name}</p>}
+        <div className="font-sans text-gray-900 bg-white max-w-[340px] mx-auto text-[11px] py-10 px-8 border shadow-lg rounded-sm">
+            {/* Header: Business Info */}
+            <div className="text-center mb-6">
+                {settings.logo && <img src={settings.logo} className="w-16 mx-auto mb-4 object-contain" alt="Logo" />}
+                <h2 className="text-2xl font-bold uppercase tracking-tight">{settings.businessName}</h2>
+                {settings.slogan && <p className="text-sm italic text-gray-500 font-medium">{settings.slogan}</p>}
+                <p className="text-[10px] mt-3 text-gray-400 font-bold uppercase tracking-widest">Operator: Demo User</p>
             </div>
 
-            {/* Title */}
-            <div className="text-center px-2 pb-1 border-b border-black">
-                {isProforma ? (
-                    <h3 className="text-sm font-bold uppercase text-blue-900">Proforma Invoice</h3>
-                ) : (
-                    <h3 className="text-sm font-bold">{settings.receiptTitle}</h3>
-                )}
+            {/* Title Section */}
+            <div className="py-3 border-t border-b border-gray-900 text-center mb-6 bg-slate-50">
+                <h3 className="text-xl font-black uppercase tracking-widest">{isProforma ? 'Proforma Invoice' : settings.receiptTitle}</h3>
             </div>
 
-            {/* Client Info */}
-            <div className="text-center mt-3">
-                <p className="font-bold text-sm">{customer.name}</p>
-                <p className="text-[9px]">{customer.phone}</p>
+            {/* Customer & Receipt Metadata */}
+            <div className="text-center mb-6 space-y-1">
+                <h4 className="text-lg font-black uppercase tracking-tight">Benson Jean</h4>
+                <p className="text-sm font-bold text-gray-500 tracking-widest">+19522129810</p>
+                <p className="text-[9px] mt-3 font-black text-slate-400 uppercase tracking-widest">
+                    {isProforma ? labels.proformaNumber : labels.receiptNumber} {sale.id}
+                </p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date().toLocaleString()}</p>
             </div>
 
-            {/* Receipt Details */}
-            <div className="text-center text-[9px] mb-2">
-                <p>{isProforma ? settings.labels.proformaNumber : settings.labels.receiptNumber} {settings.receiptPrefix}XXXXXX</p>
-                <p>{new Date(sale.date).toLocaleString()}</p>
+            {/* Summary Table */}
+            <div className="border border-gray-200 overflow-hidden mb-6 rounded-xl">
+                <table className="w-full text-[10px] table-fixed">
+                    <thead className="bg-slate-900 text-white uppercase tracking-widest">
+                        <tr className="font-bold">
+                            <th className="py-2 px-3 text-left w-[33%]">Mode</th>
+                            <th className="py-2 px-3 text-center w-[25%]">Items</th>
+                            <th className="py-2 px-3 text-center w-[17%]">Units</th>
+                            <th className="py-2 px-3 text-right w-[25%]">Sum</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr className="font-bold">
+                            <td className="py-3 px-3 text-left">Cash</td>
+                            <td className="py-3 px-3 text-center">1</td>
+                            <td className="py-3 px-3 text-center">10</td>
+                            <td className="py-3 px-3 text-right font-black">{formatCurrency(90, cs)}</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
 
-            {/* Summary Box */}
-            {!isProforma && (
-                <div className="my-2 text-[9px] text-center">
-                    <div className="grid grid-cols-4 gap-1 p-1 font-bold text-black bg-gray-100 rounded-t-md">
-                        <div>{settings.labels.pMode}</div>
-                        <div>{settings.labels.itemCount}</div>
-                        <div>{settings.labels.unitCount}</div>
-                        <div>{settings.labels.amount}</div>
-                    </div>
-                    <div className="grid grid-cols-4 gap-1 p-1 border border-t-0 border-gray-200 rounded-b-md">
-                        <div>{sale.paymentMethod}</div>
-                        <div className="tabular-nums">{totalItems}</div>
-                        <div className="tabular-nums">{totalUnits}</div>
-                        <div className="font-semibold tabular-nums">{cs}{sale.total.toFixed(2)}</div>
-                    </div>
+            {/* Detailed Item List */}
+            <div className="border-t border-gray-900 pt-4 mb-8">
+                <div className="grid grid-cols-12 gap-1 font-black text-[9px] uppercase tracking-widest border-b border-gray-200 pb-2 mb-2 text-slate-400">
+                    <div className="col-span-4">Asset</div>
+                    <div className="col-span-3 text-center">Val</div>
+                    <div className="col-span-2 text-center">Qty</div>
+                    <div className="col-span-3 text-right">Total</div>
                 </div>
-            )}
-            
-            <div className="my-2 border-t border-black" />
-
-             {/* Items List */}
-             <div className="text-[9px]">
-                 <div className="grid grid-cols-12 gap-x-2 p-1 font-bold text-black text-left bg-gray-100 rounded-t-md">
-                    <div className="col-span-3">{settings.labels.item}</div>
-                    <div className="col-span-3 text-center">{settings.labels.price}</div>
-                    <div className="col-span-3 text-center">{settings.labels.quantity}</div>
-                    <div className="col-span-3 text-right">{settings.labels.total}</div>
-                </div>
-                {sale.items.map(item => (
-                     <div key={item.product.id} className="grid grid-cols-12 gap-x-2 py-1 border-b border-dashed border-gray-300 items-start last:border-b-0">
-                        <div className="col-span-3 break-words">
-                            <p className="font-semibold whitespace-normal leading-snug line-clamp-3">{item.product.name}</p>
-                            {item.product.description && (
-                                <p className="text-gray-500 text-[8px] mt-0.5 whitespace-normal leading-snug">{item.product.description}</p>
-                            )}
+                <div className="space-y-4">
+                    <div className="grid grid-cols-12 gap-1 items-start">
+                        <div className="col-span-4">
+                            <p className="font-black uppercase tracking-tight truncate text-[10px]">Savon</p>
+                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">SKU: prev-1</p>
                         </div>
-                        <div className="col-span-3 text-center tabular-nums">{cs}{item.product.price.toFixed(2)}</div>
-                        <div className="col-span-3 text-center tabular-nums">{item.quantity}</div>
-                        <div className="col-span-3 text-right font-semibold tabular-nums">{cs}{(item.product.price * item.quantity).toFixed(2)}</div>
+                        <div className="col-span-3 text-center font-bold">{formatCurrency(9, cs)}</div>
+                        <div className="col-span-2 text-center font-bold">10</div>
+                        <div className="col-span-3 text-right font-black">{formatCurrency(90, cs)}</div>
                     </div>
-                ))}
-            </div>
-
-
-            {/* Totals */}
-            <div className="mt-2 text-[9px] space-y-0.5">
-                <div className="flex justify-between">
-                    <span className="font-semibold">{settings.labels.subtotal}</span>
-                    <span className="tabular-nums">{cs}{sale.subtotal.toFixed(2)}</span>
-                </div>
-                {sale.discount > 0 && (
-                    <div className="flex justify-between">
-                        <span className="font-semibold">{settings.labels.discount}</span>
-                        <span className="tabular-nums">-{cs}{sale.discount.toFixed(2)}</span>
-                    </div>
-                )}
-                <div className="flex justify-between font-bold text-sm mt-1 pt-1 border-t border-black">
-                    <span>{settings.labels.grandTotal}</span>
-                    <span className="tabular-nums">{cs}{sale.total.toFixed(2)}</span>
                 </div>
             </div>
 
-            <div className="my-2 border-t border-black" />
-            
-            <div className="text-center mt-2 text-[9px]">
-                <p>{settings.thankYouNote}</p>
+            {/* Financial Totals */}
+            <div className="space-y-2 border-t border-gray-900 pt-4">
+                <div className="flex justify-between font-bold text-xs uppercase tracking-tight">
+                    <span>Subtotal</span>
+                    <span>{formatCurrency(90, cs)}</span>
+                </div>
+                <div className="flex justify-between font-black text-base py-3 border-t border-b border-gray-900 uppercase tracking-tighter">
+                    <span>Grand Total</span>
+                    <span>{formatCurrency(90, cs)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-xs pt-2 uppercase tracking-widest text-slate-400">
+                    <span>Received</span>
+                    <span>{formatCurrency(100, cs)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-xs border-b border-gray-900 pb-2 uppercase tracking-widest text-slate-400">
+                    <span>Change</span>
+                    <span>{formatCurrency(10, cs)}</span>
+                </div>
+            </div>
+
+            {/* Footer */}
+            <div className="text-center mt-10">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-700">{settings.thankYouNote}</p>
             </div>
         </div>
     );
@@ -159,18 +142,21 @@ const InputField: React.FC<{
     t: (key: string) => string;
     placeholder?: string;
     maxLength?: number;
-}> = ({ labelKey, name, value, onChange, t, placeholder, maxLength }) => (
-    <div>
-        <label htmlFor={name} className="block text-sm font-medium text-gray-700">{t(labelKey as any)}</label>
+    type?: string;
+}> = ({ labelKey, name, value, onChange, t, placeholder, maxLength, type = "text" }) => (
+    <div className="space-y-2">
+        <label htmlFor={name} className="block text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">
+            {t(labelKey as any)}
+        </label>
         <input
-            type="text"
+            type={type}
             id={name}
             name={name}
             value={value}
             onChange={onChange}
             placeholder={placeholder || ''}
             maxLength={maxLength}
-            className="mt-1"
+            className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-300 focus:ring-4 focus:ring-primary/10 transition-all outline-none"
         />
     </div>
 );
@@ -178,6 +164,7 @@ const InputField: React.FC<{
 const ReceiptSettings: React.FC<ReceiptSettingsProps> = ({ settings, setSettings, t }) => {
     const [localSettings, setLocalSettings] = useState<ReceiptSettingsData>(settings);
     const [activePreview, setActivePreview] = useState<'receipt' | 'proforma'>('receipt');
+    const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -216,115 +203,140 @@ const ReceiptSettings: React.FC<ReceiptSettingsProps> = ({ settings, setSettings
     };
 
     const handleSave = () => {
-        setSettings(localSettings);
-        alert('Settings saved!');
+        setIsSaving(true);
+        // Simulate minor delay for professional feel
+        setTimeout(() => {
+            setSettings(localSettings);
+            setIsSaving(false);
+            alert('Protocol Sync Successful: Receipt configuration applied.');
+        }, 600);
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            <div className="lg:col-span-3">
-                <Card title={t('settings.receipts.editTitle')}>
-                    <div className="space-y-6">
-                        {/* Logo */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">{t('settings.receipts.logo')}</label>
-                            <div className="mt-1 flex items-center">
-                                <span className="inline-block h-16 w-16 rounded-md overflow-hidden bg-gray-100 border flex-shrink-0">
-                                    {localSettings.logo ? <img src={localSettings.logo} alt="Logo" className="h-full w-full object-contain" /> : <svg className="h-full w-full text-gray-300" fill="currentColor" viewBox="0 0 24 24"><path d="M24 20.993V24H0v-2.993A1 1 0 001 18h22a1 1 0 001 2.993zM2.5 13.5l3-3 3 3-3 3-3-3zM18 10.5l-3 3 3 3 3-3-3-3zM21.5 6l-3 3 3 3 3-3-3-3zM8.5 6l-3 3 3 3 3-3-3-3z"/></svg>}
-                                </span>
-                                <input type="file" accept="image/*" ref={fileInputRef} onChange={handleLogoUpload} className="hidden" />
-                                <button type="button" onClick={() => fileInputRef.current?.click()} className="ml-5 bg-primary text-white py-2 px-3 border border-transparent rounded-md shadow-sm text-sm leading-4 font-medium hover:bg-blue-700">
-                                    {t('settings.receipts.uploadLogo')}
-                                </button>
-                                {localSettings.logo && <button type="button" onClick={() => setLocalSettings(p => ({...p, logo: null}))} className="ml-2 text-sm text-gray-500 hover:text-red-600">Remove</button>}
-                            </div>
-                        </div>
-
-                        {/* Business Details */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
-                            <InputField labelKey="settings.receipts.businessName" name="businessName" value={localSettings.businessName} onChange={handleInputChange} t={t} />
-                            <InputField labelKey="settings.receipts.slogan" name="slogan" value={localSettings.slogan} onChange={handleInputChange} t={t} />
-                            <InputField labelKey="settings.receipts.address" name="address" value={localSettings.address} onChange={handleInputChange} t={t} />
-                            <InputField labelKey="settings.receipts.phone" name="phone" value={localSettings.phone} onChange={handleInputChange} t={t} />
-                            <InputField labelKey="settings.receipts.email" name="email" value={localSettings.email} onChange={handleInputChange} t={t} />
-                            <InputField labelKey="settings.receipts.website" name="website" value={localSettings.website} onChange={handleInputChange} t={t} />
-                            <InputField labelKey="settings.receipts.currencySymbol" name="currencySymbol" value={localSettings.currencySymbol} onChange={handleInputChange} t={t} />
-                            <InputField labelKey="settings.receipts.receiptPrefix" name="receiptPrefix" value={localSettings.receiptPrefix} onChange={handleInputChange} t={t} placeholder="e.g., RE" maxLength={2} />
-                        </div>
-
-                        {/* Social Media */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
-                            <InputField labelKey="settings.receipts.twitter" name="social.twitter" value={localSettings.social.twitter} onChange={handleInputChange} t={t} placeholder="@username" />
-                            <InputField labelKey="settings.receipts.instagram" name="social.instagram" value={localSettings.social.instagram} onChange={handleInputChange} t={t} placeholder="@username" />
-                        </div>
-
-                        {/* Receipt Text */}
-                        <InputField labelKey="settings.receipts.receiptTitle" name="receiptTitle" value={localSettings.receiptTitle} onChange={handleInputChange} t={t} />
-                        <div>
-                            <label htmlFor="thankYouNote" className="block text-sm font-medium text-gray-700">{t('settings.receipts.thankYouNote')}</label>
-                            <textarea id="thankYouNote" name="thankYouNote" value={localSettings.thankYouNote} onChange={handleInputChange} rows={2} className="mt-1"></textarea>
-                        </div>
-                        <div>
-                            <label htmlFor="termsAndConditions" className="block text-sm font-medium text-gray-700">{t('settings.receipts.termsAndConditions')}</label>
-                            <textarea id="termsAndConditions" name="termsAndConditions" value={localSettings.termsAndConditions} onChange={handleInputChange} rows={3} className="mt-1"></textarea>
-                        </div>
-
-                        {/* Customizable Labels */}
-                        <div className="pt-6 border-t">
-                            <h3 className="text-lg font-medium text-gray-900 mb-4">{t('settings.receipts.customizeLabels')}</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
-                                <InputField labelKey="settings.receipts.labelReceiptNumber" name="labels.receiptNumber" value={localSettings.labels.receiptNumber} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelProformaNumber" name="labels.proformaNumber" value={localSettings.labels.proformaNumber} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelDate" name="labels.date" value={localSettings.labels.date} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelTime" name="labels.time" value={localSettings.labels.time} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelCustomer" name="labels.customer" value={localSettings.labels.customer} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelCashier" name="labels.cashier" value={localSettings.labels.cashier} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelPayment" name="labels.payment" value={localSettings.labels.payment} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelItem" name="labels.item" value={localSettings.labels.item} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelTotal" name="labels.total" value={localSettings.labels.total} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelSubtotal" name="labels.subtotal" value={localSettings.labels.subtotal} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelTax" name="labels.tax" value={localSettings.labels.tax} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelDiscount" name="labels.discount" value={localSettings.labels.discount} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelGrandTotal" name="labels.grandTotal" value={localSettings.labels.grandTotal} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelItemCode" name="labels.itemCode" value={localSettings.labels.itemCode} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelQuantity" name="labels.quantity" value={localSettings.labels.quantity} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelPrice" name="labels.price" value={localSettings.labels.price} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelCashReceived" name="labels.cashReceived" value={localSettings.labels.cashReceived} onChange={handleInputChange} t={t} />
-                                <InputField labelKey="settings.receipts.labelChange" name="labels.change" value={localSettings.labels.change} onChange={handleInputChange} t={t} />
-                            </div>
-                        </div>
-
-
-                        {/* Save Button */}
-                        <div className="text-right pt-4 border-t">
-                             <button onClick={handleSave} className="bg-primary text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-sm">
-                                {t('settings.receipts.saveButton')}
-                            </button>
-                        </div>
+        <div className="max-w-7xl mx-auto pb-24 font-sans animate-fade-in">
+             <div className="bg-slate-900 rounded-[3rem] p-10 text-white shadow-2xl relative overflow-hidden mb-10">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-primary/20 rounded-full -mr-40 -mt-40 blur-[100px]"></div>
+                <div className="relative flex items-center gap-8">
+                    <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/10">
+                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                     </div>
-                </Card>
+                    <div>
+                        <h1 className="text-3xl font-black uppercase tracking-tighter leading-none">{t('settings.receipts.editTitle')}</h1>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-3">Visual Authorization Protocol</p>
+                    </div>
+                </div>
             </div>
-            <div className="lg:col-span-2">
-                <div className="lg:sticky top-6">
-                    <Card title={t('settings.receipts.previewTitle')}>
-                        <div className="mb-4 flex justify-center p-1 bg-gray-200 rounded-lg">
-                            <button 
-                                onClick={() => setActivePreview('receipt')}
-                                className={`w-1/2 py-2 text-sm font-semibold rounded-md transition-colors ${activePreview === 'receipt' ? 'bg-white text-primary shadow' : 'text-gray-600'}`}
-                            >
-                                Receipt
-                            </button>
-                            <button 
-                                onClick={() => setActivePreview('proforma')}
-                                className={`w-1/2 py-2 text-sm font-semibold rounded-md transition-colors ${activePreview === 'proforma' ? 'bg-white text-primary shadow' : 'text-gray-600'}`}
-                            >
-                                Proforma
-                            </button>
-                        </div>
-                        <div className="h-[75vh] bg-gray-100 p-2 rounded-lg">
-                           <ReceiptPreview settings={localSettings} isProforma={activePreview === 'proforma'} />
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                <div className="lg:col-span-7 space-y-10">
+                    {/* Identity Section */}
+                    <Card title="Corporate Identity" className="rounded-[3rem] shadow-xl border-none">
+                        <div className="space-y-8">
+                            <div>
+                                <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 mb-4">{t('settings.receipts.logo')}</label>
+                                <div className="flex items-center gap-8 bg-slate-50 dark:bg-gray-900 p-8 rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-gray-800">
+                                    <div className="h-24 w-24 rounded-[2rem] overflow-hidden bg-white dark:bg-gray-800 border-2 border-slate-100 dark:border-gray-700 shadow-sm flex-shrink-0 flex items-center justify-center p-2">
+                                        {localSettings.logo ? <img src={localSettings.logo} alt="Logo" className="h-full w-full object-contain" /> : <svg className="w-10 h-10 text-slate-200" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM11.99 15.89l-2.6-3.07L6 16.22h12l-3.37-4.48-2.64 3.15z"/></svg>}
+                                    </div>
+                                    <div className="space-y-3">
+                                        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleLogoUpload} className="hidden" />
+                                        <button type="button" onClick={() => fileInputRef.current?.click()} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-black transition-all active:scale-95">
+                                            {t('settings.receipts.uploadLogo')}
+                                        </button>
+                                        {localSettings.logo && (
+                                            <button type="button" onClick={() => setLocalSettings(p => ({...p, logo: null}))} className="block w-full text-center text-[9px] font-black uppercase text-rose-500 hover:underline">Revoke Seal</button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                <InputField labelKey="settings.receipts.businessName" name="businessName" value={localSettings.businessName} onChange={handleInputChange} t={t} placeholder="Global Corp" />
+                                <InputField labelKey="settings.receipts.slogan" name="slogan" value={localSettings.slogan} onChange={handleInputChange} t={t} placeholder="Excellence in Motion" />
+                            </div>
                         </div>
                     </Card>
+
+                    {/* Communication Hub */}
+                    <Card title="Communication Hub" className="rounded-[3rem] shadow-xl border-none">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <InputField labelKey="settings.receipts.address" name="address" value={localSettings.address} onChange={handleInputChange} t={t} placeholder="123 Protocol St." />
+                            <InputField labelKey="settings.receipts.phone" name="phone" value={localSettings.phone} onChange={handleInputChange} t={t} placeholder="+1 000 000 0000" />
+                            <InputField labelKey="settings.receipts.email" name="email" value={localSettings.email} onChange={handleInputChange} t={t} placeholder="hq@domain.com" />
+                            <InputField labelKey="settings.receipts.website" name="website" value={localSettings.website} onChange={handleInputChange} t={t} placeholder="www.domain.com" />
+                        </div>
+                    </Card>
+
+                    {/* Financial Protocol */}
+                    <Card title="Financial Protocol" className="rounded-[3rem] shadow-xl border-none">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <InputField labelKey="settings.receipts.currencySymbol" name="currencySymbol" value={localSettings.currencySymbol} onChange={handleInputChange} t={t} placeholder="$" />
+                            <InputField labelKey="settings.receipts.receiptPrefix" name="receiptPrefix" value={localSettings.receiptPrefix} onChange={handleInputChange} t={t} placeholder="RE" maxLength={2} />
+                            <div className="sm:col-span-2">
+                                <InputField labelKey="settings.receipts.receiptTitle" name="receiptTitle" value={localSettings.receiptTitle} onChange={handleInputChange} t={t} placeholder="SALES RECEIPT" />
+                            </div>
+                            <div className="sm:col-span-2 space-y-2">
+                                <label htmlFor="thankYouNote" className="block text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">{t('settings.receipts.thankYouNote')}</label>
+                                <textarea id="thankYouNote" name="thankYouNote" value={localSettings.thankYouNote} onChange={handleInputChange} rows={2} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-300 focus:ring-4 focus:ring-primary/10 transition-all outline-none resize-none"></textarea>
+                            </div>
+                            <div className="sm:col-span-2 space-y-2">
+                                <label htmlFor="termsAndConditions" className="block text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">{t('settings.receipts.termsAndConditions')}</label>
+                                <textarea id="termsAndConditions" name="termsAndConditions" value={localSettings.termsAndConditions} onChange={handleInputChange} rows={3} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-300 focus:ring-4 focus:ring-primary/10 transition-all outline-none resize-none"></textarea>
+                            </div>
+                        </div>
+                    </Card>
+
+                    {/* Variable Overrides */}
+                    <Card title="Interface Variable Overrides" className="rounded-[3rem] shadow-xl border-none">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <InputField labelKey="settings.receipts.labelReceiptNumber" name="labels.receiptNumber" value={localSettings.labels.receiptNumber} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelProformaNumber" name="labels.proformaNumber" value={localSettings.labels.proformaNumber} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelDate" name="labels.date" value={localSettings.labels.date} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelTime" name="labels.time" value={localSettings.labels.time} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelCustomer" name="labels.customer" value={localSettings.labels.customer} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelCashier" name="labels.cashier" value={localSettings.labels.cashier} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelPayment" name="labels.payment" value={localSettings.labels.payment} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelItem" name="labels.item" value={localSettings.labels.item} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelTotal" name="labels.total" value={localSettings.labels.total} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelSubtotal" name="labels.subtotal" value={localSettings.labels.subtotal} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelTax" name="labels.tax" value={localSettings.labels.tax} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelDiscount" name="labels.discount" value={localSettings.labels.discount} onChange={handleInputChange} t={t} />
+                            <InputField labelKey="settings.receipts.labelGrandTotal" name="labels.grandTotal" value={localSettings.labels.grandTotal} onChange={handleInputChange} t={t} />
+                        </div>
+                    </Card>
+                </div>
+
+                {/* Preview Sticky Column */}
+                <div className="lg:col-span-5">
+                    <div className="lg:sticky top-10 space-y-8">
+                        <Card title={t('settings.receipts.previewTitle')} className="rounded-[3rem] shadow-2xl border-none">
+                            <div className="mb-8 flex p-1.5 bg-slate-50 dark:bg-gray-950 rounded-2xl shadow-inner border border-slate-100 dark:border-gray-800">
+                                <button 
+                                    onClick={() => setActivePreview('receipt')}
+                                    className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activePreview === 'receipt' ? 'bg-white dark:bg-gray-800 text-primary shadow-sm border border-slate-100 dark:border-gray-700' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    Receipt Node
+                                </button>
+                                <button 
+                                    onClick={() => setActivePreview('proforma')}
+                                    className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${activePreview === 'proforma' ? 'bg-white dark:bg-gray-800 text-primary shadow-sm border border-slate-100 dark:border-gray-700' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    Proforma Node
+                                </button>
+                            </div>
+                            <div className="bg-slate-50/50 dark:bg-gray-950 p-6 md:p-10 rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-gray-800">
+                                <ReceiptPreview settings={localSettings} isProforma={activePreview === 'proforma'} />
+                            </div>
+                        </Card>
+
+                        <button 
+                            onClick={handleSave} 
+                            disabled={isSaving}
+                            className="w-full py-6 bg-primary text-white rounded-[2.5rem] font-black uppercase text-[11px] tracking-[0.3em] shadow-2xl shadow-primary/30 hover:bg-blue-700 transition-all hover:-translate-y-1 active:translate-y-0 active:scale-95 flex items-center justify-center gap-3"
+                        >
+                            {isSaving ? <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></div> : t('settings.receipts.saveButton')}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

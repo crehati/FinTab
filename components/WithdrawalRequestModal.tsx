@@ -1,15 +1,18 @@
+
 import React, { useState, useEffect } from 'react';
+import ModalShell from './ModalShell';
 
 interface WithdrawalRequestModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onConfirm: (amount: number, source: 'commission' | 'investment') => void;
+    onConfirm: (amount: number, source: 'commission' | 'investment' | 'compensation') => void;
     availableBalance: number;
     currencySymbol: string;
-    source: 'commission' | 'investment';
+    source: 'commission' | 'investment' | 'compensation';
+    isProcessing?: boolean;
 }
 
-const WithdrawalRequestModal: React.FC<WithdrawalRequestModalProps> = ({ isOpen, onClose, onConfirm, availableBalance, currencySymbol, source }) => {
+const WithdrawalRequestModal: React.FC<WithdrawalRequestModalProps> = ({ isOpen, onClose, onConfirm, availableBalance, currencySymbol, source, isProcessing = false }) => {
     const [amount, setAmount] = useState('');
     const [error, setError] = useState('');
 
@@ -27,65 +30,84 @@ const WithdrawalRequestModal: React.FC<WithdrawalRequestModalProps> = ({ isOpen,
     };
 
     const handleSubmit = () => {
+        if (isProcessing) return;
+
         const numericAmount = parseFloat(amount);
         if (isNaN(numericAmount) || numericAmount <= 0) {
             setError('Please enter a valid amount greater than zero.');
             return;
         }
+        
         if (numericAmount > availableBalance) {
-            setError(`Amount cannot exceed your available balance of ${currencySymbol}${availableBalance.toFixed(2)}.`);
+            setError(`Protocol Error: Insufficient liquidity. Available: ${currencySymbol}${availableBalance.toFixed(2)}.`);
             return;
         }
+        
         onConfirm(numericAmount, source);
-        onClose();
     };
 
-    if (!isOpen) return null;
+    const sourceLabel = source === 'commission' ? 'Staff Commission' : source === 'investment' ? 'Partner Dividends' : 'Owner Compensation';
+
+    const footer = (
+        <>
+            <button 
+                onClick={handleSubmit}
+                className="btn-base btn-primary flex-1 py-5"
+                disabled={isProcessing || !amount}
+            >
+                {isProcessing && <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>}
+                Confirm Reservation
+            </button>
+            <button 
+                onClick={onClose}
+                className="btn-base btn-secondary px-10 py-5"
+                disabled={isProcessing}
+            >
+                Cancel
+            </button>
+        </>
+    );
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
-                <header className="p-6 border-b">
-                    <h2 className="text-2xl font-bold text-gray-800">Request Withdrawal</h2>
-                </header>
-                <main className="p-6 space-y-4">
-                    <div>
-                        <p className="text-sm text-gray-600">Available Balance ({source}): <span className="font-bold text-primary">{currencySymbol}{availableBalance.toFixed(2)}</span></p>
-                    </div>
-                    <div>
-                        <label htmlFor="withdrawal-amount" className="block text-sm font-medium text-gray-700">Amount to Withdraw</label>
-                        <div className="mt-1 relative rounded-md shadow-sm">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <span className="text-gray-500 sm:text-lg">{currencySymbol}</span>
-                            </div>
-                            <input
-                                type="number"
-                                id="withdrawal-amount"
-                                value={amount}
-                                onChange={handleAmountChange}
-                                className="focus:ring-primary focus:border-primary block w-full pl-8 pr-4 sm:text-lg border-gray-300 rounded-md py-2 text-center font-semibold"
-                                placeholder="0.00"
-                                step="0.01"
-                                min="0.01"
-                                max={availableBalance.toFixed(2)}
-                                autoFocus
-                            />
+        <ModalShell
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Initialize Payout"
+            description={`Wallet Source: ${sourceLabel}`}
+            maxWidth="max-w-md"
+            footer={footer}
+        >
+            <div className="space-y-8">
+                <div className="flex justify-between items-center px-6 py-5 bg-slate-50 dark:bg-gray-800/50 rounded-[1.5rem] border border-slate-100 dark:border-gray-700">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-xs">Verified Available</span>
+                    <span className="text-xl font-black text-primary tabular-nums">{currencySymbol}{availableBalance.toFixed(2)}</span>
+                </div>
+
+                <div className="space-y-4">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-xs block">Payout Value ({currencySymbol})</label>
+                    <div className="relative">
+                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                            <span className="text-slate-400 font-bold text-xl">{currencySymbol}</span>
                         </div>
+                        <input 
+                            type="number" 
+                            value={amount} 
+                            onChange={handleAmountChange}
+                            className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl py-6 pl-12 pr-6 text-3xl font-black text-slate-900 dark:text-white tabular-nums focus:ring-4 focus:ring-primary/10 transition-all outline-none" 
+                            placeholder="0.00"
+                            step="0.01"
+                            autoFocus
+                            disabled={isProcessing}
+                        />
                     </div>
-                    {error && <p className="text-sm text-red-600">{error}</p>}
-                </main>
-                <footer className="p-4 bg-gray-50 rounded-b-lg flex sm:justify-center">
-                    <div className="responsive-btn-group sm:flex-row-reverse">
-                        <button type="button" onClick={handleSubmit} className="bg-primary text-white hover:bg-blue-700">
-                            Send Request
-                        </button>
-                        <button type="button" onClick={onClose} className="bg-gray-200 text-gray-800 hover:bg-gray-300">
-                            Cancel
-                        </button>
-                    </div>
-                </footer>
+                    {error && (
+                        <div className="p-4 bg-rose-50 text-rose-600 text-[10px] font-bold uppercase tracking-widest rounded-2xl border border-rose-100 animate-shake text-center">
+                            {error}
+                        </div>
+                    )}
+                </div>
             </div>
-        </div>
+        </ModalShell>
     );
 };
 

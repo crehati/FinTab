@@ -1,5 +1,3 @@
-
-
 import React, { memo } from 'react';
 
 interface CardProps {
@@ -11,8 +9,8 @@ interface CardProps {
 
 const Card: React.FC<CardProps> = ({ title, children, className, headerContent }) => {
     return (
-        <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 ${className}`}>
-            <div className="flex justify-between items-center mb-4">
+        <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-md p-lg ${className}`}>
+            <div className="flex justify-between items-center mb-lg">
                 <h2 className="text-xl font-bold text-neutral-dark dark:text-gray-100">{title}</h2>
                 {headerContent}
             </div>

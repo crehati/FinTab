@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import type { Expense, ReceiptSettingsData } from '../types';
@@ -33,18 +34,22 @@ const ExpenseReport: React.FC<ExpenseReportProps> = ({ expenses, t, receiptSetti
     }, [expenses, startDate, endDate, selectedCategory]);
 
     const categoryTotals = useMemo(() => {
-        // FIX: Use a generic type argument for `reduce` to correctly type the accumulator.
-        const totals = filteredExpenses.reduce<Record<string, { totalAmount: number; count: number }>>((acc, expense) => {
-            if (!acc[expense.category]) {
-                acc[expense.category] = { totalAmount: 0, count: 0 };
-            }
-            acc[expense.category].totalAmount += expense.amount;
-            acc[expense.category].count += 1;
+        // FIX: Explicitly typed the accumulator 'acc' to Record<string, { totalAmount: number; count: number }> to avoid unknown property access errors and added type checking in map.
+        const totals = filteredExpenses.reduce((acc: Record<string, { totalAmount: number; count: number }>, expense) => {
+            const current = acc[expense.category] || { totalAmount: 0, count: 0 };
+            acc[expense.category] = {
+                totalAmount: current.totalAmount + expense.amount,
+                count: current.count + 1
+            };
             return acc;
-        }, {});
+        }, {} as Record<string, { totalAmount: number; count: number }>);
 
         return Object.entries(totals)
-            .map(([name, data]) => ({ name, value: data.totalAmount, count: data.count }))
+            .map(([name, data]) => ({ 
+                name, 
+                value: (data as { totalAmount: number; count: number }).totalAmount, 
+                count: (data as { totalAmount: number; count: number }).count 
+            }))
             .sort((a, b) => b.value - a.value);
     }, [filteredExpenses]);
 

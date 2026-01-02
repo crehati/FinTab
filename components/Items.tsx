@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Product, ReceiptSettingsData, CartItem, ProductVariant } from '../types';
 import { formatCurrency } from '../lib/utils';
-import { SearchIcon, ChevronDownIcon } from '../constants';
+import { ChevronDownIcon, InventoryIcon, StorefrontIcon } from '../constants';
 import VariantSelectionModal from './VariantSelectionModal';
 import QuantityModal from './QuantityModal';
+import SearchInput from './SearchInput';
 
 interface ItemsProps {
     products: Product[];
@@ -56,87 +57,116 @@ const Items: React.FC<ItemsProps> = ({ products, cart, t, receiptSettings, onUpd
     
     const handleSetSimpleQuantity = (product: Product, quantity: number) => {
         onUpdateCartItem(product, undefined, quantity);
-        setToastMessage(`${quantity} x ${product.name} set in cart`);
+        setToastMessage(`${quantity} x ${product.name} synchronized to terminal`);
         setTimeout(() => setToastMessage(null), 2500);
-        setSelectedProductForModal(null); // Close modal
+        setSelectedProductForModal(null);
     };
 
     const handleSetVariantQuantity = (product: Product, variant: ProductVariant, quantity: number) => {
         onUpdateCartItem(product, variant, quantity);
         const variantName = variant.attributes.map(a => a.value).join(' / ');
-        setToastMessage(`${quantity} x ${product.name} (${variantName}) added to cart`);
+        setToastMessage(`${quantity} x ${product.name} (${variantName}) authorized`);
         setTimeout(() => setToastMessage(null), 2500);
-        setSelectedProductForModal(null); // Close modal
+        setSelectedProductForModal(null);
     };
 
     const isVariableProduct = selectedProductForModal?.productType === 'variable';
 
     return (
-        <div className="space-y-6">
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <SearchIcon />
+        <div className="max-w-7xl mx-auto space-y-12 pb-32 animate-fade-in font-sans">
+            {/* High-Fidelity Header Block */}
+            <div className="bg-slate-900 rounded-[3rem] p-8 md:p-12 text-white shadow-2xl relative overflow-hidden border border-white/5">
+                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/20 rounded-full -mr-48 -mt-48 blur-[120px]"></div>
+                <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-10">
+                    <div className="flex items-center gap-10">
+                        <div className="w-20 h-20 bg-white/5 backdrop-blur-xl rounded-3xl flex items-center justify-center border border-white/10 shadow-inner">
+                            <InventoryIcon className="w-10 h-10 text-primary" />
+                        </div>
+                        <div>
+                            <h1 className="text-4xl font-black uppercase tracking-tighter leading-none">Internal Assets</h1>
+                            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.5em] mt-4">Authorized Global Catalog</p>
+                        </div>
+                    </div>
+                    <div className="w-full md:w-96">
+                        <SearchInput
+                            placeholder="Asset ID or Identifier Search..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            containerClassName="!bg-white/5 backdrop-blur-md rounded-[2rem] border border-white/10"
+                            className="text-white placeholder-slate-500"
+                        />
+                    </div>
                 </div>
-                <input
-                    type="text"
-                    placeholder="Search products..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-lg shadow-sm text-neutral-dark placeholder-neutral-medium focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-primary"
-                    aria-label="Search products"
-                />
             </div>
 
-            <div className="space-y-8">
+            <div className="space-y-10">
                 {categoryNames.map(category => {
                     const productsInCategory = groupedProducts[category];
                     const filteredProductsInCategory = productsInCategory.filter(p =>
                         p.name.toLowerCase().includes(searchTerm.toLowerCase())
                     );
 
-                    if (filteredProductsInCategory.length === 0) {
-                        return null;
-                    }
+                    if (filteredProductsInCategory.length === 0) return null;
 
                     const isCollapsed = collapsedCategories.has(category);
 
                     return (
-                        <div key={category}>
+                        <div key={category} className="animate-fade-in">
                             <button
                                 onClick={() => toggleCategory(category)}
-                                className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors duration-200"
+                                className="w-full flex justify-between items-center p-8 bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-sm border border-slate-50 dark:border-gray-800 group hover:shadow-md transition-all active:scale-[0.99]"
                                 aria-expanded={!isCollapsed}
                             >
-                                <h2 className="text-xl font-bold text-gray-700">{category} ({filteredProductsInCategory.length})</h2>
-                                <ChevronDownIcon className={`w-6 h-6 text-gray-500 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} />
+                                <div className="flex items-center gap-6">
+                                    <div className={`w-3 h-3 rounded-full transition-colors ${isCollapsed ? 'bg-slate-200' : 'bg-primary shadow-[0_0_12px_rgba(37,99,235,0.5)]'}`}></div>
+                                    <div>
+                                        <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter">{category}</h2>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 text-left">{filteredProductsInCategory.length} Units Enrolled</p>
+                                    </div>
+                                </div>
+                                <div className={`p-3 rounded-2xl bg-slate-50 dark:bg-gray-800 text-slate-400 transition-transform duration-500 ${isCollapsed ? '' : 'rotate-180 bg-primary/10 text-primary'}`}>
+                                    <ChevronDownIcon className="w-6 h-6" />
+                                </div>
                             </button>
 
                             {!isCollapsed && (
-                                <div className="mt-4 grid grid-cols-3 gap-2 md:gap-4 lg:grid-cols-4 xl:grid-cols-5">
+                                <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 px-2">
                                     {filteredProductsInCategory.map(product => {
+                                        const isOutOfStock = product.stock <= 0;
                                         return (
                                             <button
                                                 key={product.id}
                                                 onClick={() => handleProductClick(product)}
-                                                disabled={product.stock === 0}
-                                                className="bg-white rounded-xl shadow-md flex flex-col overflow-hidden text-left transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                                                aria-label={`Add ${product.name} to cart`}
+                                                disabled={isOutOfStock}
+                                                className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-sm flex flex-col overflow-hidden text-left transition-all hover:shadow-2xl hover:-translate-y-2 group border border-slate-50 dark:border-gray-800 disabled:opacity-50 disabled:grayscale disabled:transform-none relative"
                                             >
-                                                <div className="relative">
-                                                    <img src={product.imageUrl} alt={product.name} className="w-full aspect-square object-cover" />
+                                                <div className="relative aspect-square overflow-hidden bg-slate-50 dark:bg-gray-800">
+                                                    <img 
+                                                        src={product.imageUrl} 
+                                                        alt={product.name} 
+                                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                                                    />
+                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                                    {product.productType === 'variable' && (
+                                                        <div className="absolute top-4 right-4 px-3 py-1.5 bg-primary/90 backdrop-blur-md rounded-xl text-white text-[8px] font-black uppercase tracking-widest shadow-lg">Variants</div>
+                                                    )}
                                                 </div>
-                                                <div className="p-2 flex flex-col flex-grow text-center">
-                                                    <h3 className="text-sm font-bold text-neutral-dark leading-tight h-10 flex items-center justify-center">{product.name}</h3>
-                                                    <div className="flex-grow"></div>
-                                                    <div className="mt-2 w-full">
-                                                        <p className="font-semibold text-neutral-dark text-sm">
-                                                            {product.productType === 'variable' && product.variants && product.variants.length > 0
-                                                                ? `From ${formatCurrency(Math.min(...product.variants.map(v => v.price)), receiptSettings.currencySymbol)}`
-                                                                : formatCurrency(product.price, receiptSettings.currencySymbol)}
-                                                        </p>
-                                                        <p className={`text-xs font-medium mt-1 ${product.stock > 10 ? 'text-success' : product.stock > 0 ? 'text-warning' : 'text-error'}`}>
-                                                            {product.stock > 0 ? `${product.stock} in stock` : 'Out of Stock'}
-                                                        </p>
+                                                <div className="p-6 flex flex-col flex-grow text-center relative">
+                                                    <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight line-clamp-2 h-8 leading-tight mb-4">
+                                                        {product.name}
+                                                    </h3>
+                                                    <div className="mt-auto space-y-3">
+                                                        <div>
+                                                            <p className="text-[14px] font-black text-slate-900 dark:text-gray-200 tabular-nums">
+                                                                {product.productType === 'variable' && product.variants && product.variants.length > 0
+                                                                    ? `${formatCurrency(Math.min(...product.variants.map(v => v.price)), receiptSettings.currencySymbol)} +`
+                                                                    : formatCurrency(product.price, receiptSettings.currencySymbol)}
+                                                            </p>
+                                                            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Protocol Value</p>
+                                                        </div>
+                                                        <div className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-colors ${product.stock > 10 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : product.stock > 0 ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                                                            {product.stock > 0 ? `Q: ${product.stock} Units` : 'Stock Null'}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </button>
@@ -149,8 +179,9 @@ const Items: React.FC<ItemsProps> = ({ products, cart, t, receiptSettings, onUpd
                 })}
                 
                 {!anyProductMatches && searchTerm && (
-                    <div className="col-span-full text-center py-16">
-                        <p className="text-gray-500 text-lg">No products found for "{searchTerm}".</p>
+                    <div className="col-span-full py-32 text-center bg-white dark:bg-gray-900 rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-gray-800">
+                        <StorefrontIcon className="w-16 h-16 text-slate-200 mx-auto mb-6" />
+                        <p className="text-slate-400 font-black uppercase tracking-[0.3em] text-[11px]">Zero matches for identification: "{searchTerm}"</p>
                     </div>
                 )}
             </div>
@@ -175,8 +206,11 @@ const Items: React.FC<ItemsProps> = ({ products, cart, t, receiptSettings, onUpd
             )}
 
             {toastMessage && (
-                <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-neutral-dark text-white px-4 py-2 rounded-lg shadow-lg z-30 animate-pulse">
-                    {toastMessage}
+                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-fade-in-up">
+                    <div className="bg-slate-900 text-white px-8 py-4 rounded-2xl shadow-2xl border border-white/10 backdrop-blur-xl flex items-center gap-4">
+                        <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                        <p className="text-[10px] font-black uppercase tracking-widest">{toastMessage}</p>
+                    </div>
                 </div>
             )}
         </div>
