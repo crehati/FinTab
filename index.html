@@ -6,7 +6,6 @@
     <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACLSURBVFhH7YxBCoAwDEV7/0t7A8VCEHupI/dEFjWQzH3z4AIAAAAAAM909f2QpNM7K9sY2YI2E5tJjmaT40kKzWpI9k8HAYzhrM8z+bzgYaY8dZMIxNBEJg2lUJAXG0Ww2f80mgWj2YtL1i5kUE41mE1m6vXQ/AAAAAAAwnb4A6/kGZ0uYxsoAAAAASUVORK5CYII=" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#2563EB" />
-    <link rel="manifest" href="/manifest.json" />
     <title>FinTab</title>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,144 +21,58 @@
             fontFamily: {
               sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
             },
-            spacing: {
-              'xs': '4px',
-              'sm': '8px',
-              'md': '12px',
-              'lg': '16px',
-              'xl': '24px',
-              'xxl': '32px',
-            },
             colors: {
               primary: '#2563EB',
-              'accent-teal': '#14B8A6',
-              'accent-sky': '#38BDF8',
-              'neutral-light': '#F3F4F6',
-              'neutral-dark': '#374151',
-              'neutral-medium': '#6B7280',
               success: '#22C55E',
               warning: '#FACC15',
               error: '#EF4444',
-            },
-            animation: {
-              'fade-in': 'fadeIn 0.4s ease-out',
-              'scale-in': 'scaleIn 0.2s ease-out',
-              'fade-in-up': 'fadeInUp 0.3s ease-out forwards',
-            },
-            keyframes: {
-              fadeIn: {
-                '0%': { opacity: '0', transform: 'translateY(10px)' },
-                '100%': { opacity: '1', transform: 'translateY(0)' },
-              },
-              scaleIn: {
-                '0%': { transform: 'scale(0.95)', opacity: '0' },
-                '100%': { transform: 'scale(1)', opacity: '1' },
-              },
-              fadeInUp: {
-                '0%': { opacity: '0', transform: 'translateY(20px)' },
-                '100%': { opacity: '1', transform: 'translateY(0)' },
-              }
             }
           }
         }
       }
     </script>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+      :root {
+        --header-height: 64px;
+        --sidebar-width: 280px;
+        font-size: 16px;
+      }
+      * {
+        font-family: 'Inter', sans-serif !important;
+        -webkit-font-smoothing: antialiased;
+        box-sizing: border-box;
+      }
+      html, body, #root {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: #f8fafc;
+        overflow: hidden;
+      }
+      .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
   <script type="importmap">
 {
   "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.1.1/",
-    "react": "https://aistudiocdn.com/react@^19.1.1",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.1.1/",
-    "react-dom": "https://aistudiocdn.com/react-dom@^19.1.1",
-    "recharts": "https://aistudiocdn.com/recharts@^3.2.1",
-    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.1",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^0.12.0",
-    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm",
     "vite": "https://esm.sh/vite@^7.3.0",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.89.0"
   }
 }
 </script>
-<style>
-  :root {
-    --header-height: 64px;
-    --sidebar-width: 280px;
-    font-size: 16px;
-    --table-px: 1.5rem;
-    --table-py: 1.25rem;
-    --table-font-size: 0.875rem;
-    --table-header-py: 1rem;
-  }
-  @media (max-width: 1024px) {
-    :root { 
-      --table-px: 1rem;
-      --table-py: 0.875rem;
-      --table-font-size: 0.8125rem;
-    }
-  }
-  @media (max-width: 640px) {
-    :root { font-size: 14px; }
-  }
-  * {
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
-    -webkit-font-smoothing: antialiased;
-    box-sizing: border-box;
-  }
-  html, body {
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    background-color: #f8fafc;
-    color: #1e293b;
-  }
-  #root {
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-  .no-scroll { overflow: hidden !important; touch-action: none; }
-  .btn-base {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    border-radius: 1.25rem;
-    padding: 1rem 1.5rem;
-    font-size: 0.6875rem;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .btn-primary { background: #2563EB; color: white; }
-  .btn-secondary { background: #F1F5F9; color: #475569; }
-  .status-badge {
-    display: inline-flex;
-    padding: 0.25rem 0.75rem;
-    border-radius: 0.5rem;
-    font-size: 0.625rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    border-width: 1px;
-    border-style: solid;
-  }
-  .status-approved { background: #f0fdf4; color: #166534; border-color: #dcfce7; }
-  .status-pending { background: #fffbeb; color: #92400e; border-color: #fef3c7; }
-  .status-rejected { background: #fef2f2; color: #991b1b; border-color: #fee2e2; }
-  .table-wrapper { overflow-x: auto; border-radius: 1.5rem; border: 1px solid #F1F5F9; }
-  thead th { position: sticky; top: 0; z-index: 10; background: #F8FAFC; padding: 1rem 1.5rem; text-align: left; font-size: 0.625rem; text-transform: uppercase; color: #64748B; border-bottom: 2px solid #E2E8F0; }
-  tbody td { padding: 1.25rem 1.5rem; font-size: 0.875rem; border-bottom: 1px solid #F1F5F9; }
-</style>
-  </head>
-  <body class="bg-slate-50 dark:bg-gray-950 font-sans">
+</head>
+  <body class="bg-slate-50 dark:bg-gray-950">
     <div id="modal-root"></div>
     <div id="root"></div>
+    <!-- VITE ENTRY POINT -->
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
