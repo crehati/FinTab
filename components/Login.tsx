@@ -74,12 +74,25 @@ const Login: React.FC<any> = ({ onEnterDemo }) => {
 
     if (showVerificationNotice) {
         return (
-            <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-8 font-sans">
-                <div className="bg-white p-12 rounded-[3rem] shadow-2xl text-center max-w-md">
-                    <EmailIcon className="w-16 h-16 text-primary mx-auto mb-6" />
-                    <h2 className="text-2xl font-black uppercase tracking-tighter">Check Protocol</h2>
-                    <p className="text-slate-500 mt-4 leading-relaxed">Verification node sent to {email}.</p>
-                    <button onClick={() => setShowVerificationNotice(false)} className="mt-10 btn-base btn-primary w-full">Back to Login</button>
+            <div className="min-h-screen bg-slate-50 dark:bg-gray-950 flex flex-col items-center justify-center p-8 font-sans">
+                <div className="bg-white dark:bg-gray-900 p-12 rounded-[3rem] shadow-2xl text-center max-w-md border border-slate-100 dark:border-gray-800">
+                    <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
+                        <EmailIcon className="w-10 h-10 text-primary" />
+                    </div>
+                    <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900 dark:text-white">Check Protocol</h2>
+                    <p className="text-slate-500 dark:text-slate-400 mt-4 leading-relaxed font-medium">Verification node dispatched to:<br/><span className="font-black text-slate-900 dark:text-white">{email}</span></p>
+                    
+                    <div className="space-y-4 mt-12">
+                        <button onClick={() => setShowVerificationNotice(false)} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all">Back to Sign In</button>
+                        <div className="flex items-center gap-4 py-4">
+                            <div className="h-px bg-slate-100 dark:bg-gray-800 flex-1"></div>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">OR</span>
+                            <div className="h-px bg-slate-100 dark:bg-gray-800 flex-1"></div>
+                        </div>
+                        <button onClick={onEnterDemo} className="w-full py-4 bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-amber-100 transition-all flex items-center justify-center gap-3">
+                            <span>✨</span> Launch Demo Node Instead
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -98,10 +111,10 @@ const Login: React.FC<any> = ({ onEnterDemo }) => {
                         {error && <div className="p-4 bg-rose-50 text-rose-600 text-xs font-bold rounded-xl text-center">{error}</div>}
                         
                         {!isLoginMode && (
-                            <input type="text" placeholder="Full Identity Name" required value={fullName} onChange={e => setFullName(e.target.value)} className="w-full bg-slate-50 dark:bg-gray-800 rounded-xl p-4 text-sm font-bold outline-none" />
+                            <input type="text" placeholder="Full Identity Name" required value={fullName} onChange={e => setFullName(e.target.value)} className="w-full bg-slate-50 dark:bg-gray-800 rounded-xl p-4 text-sm font-bold outline-none border-2 border-transparent focus:border-primary/20 transition-all" />
                         )}
-                        <input type="email" placeholder="Identity Email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-50 dark:bg-gray-800 rounded-xl p-4 text-sm font-bold outline-none" />
-                        <input type="password" placeholder="Protocol Password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-slate-50 dark:bg-gray-800 rounded-xl p-4 text-sm font-bold outline-none" />
+                        <input type="email" placeholder="Identity Email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-50 dark:bg-gray-800 rounded-xl p-4 text-sm font-bold outline-none border-2 border-transparent focus:border-primary/20 transition-all" />
+                        <input type="password" placeholder="Protocol Password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-slate-50 dark:bg-gray-800 rounded-xl p-4 text-sm font-bold outline-none border-2 border-transparent focus:border-primary/20 transition-all" />
                         
                         <button type="submit" disabled={isLoading} className="w-full bg-slate-900 text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">
                             {isLoading ? 'Processing...' : isLoginMode ? 'Authorize Entry' : 'Enroll Identity'}

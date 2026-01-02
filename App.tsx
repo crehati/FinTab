@@ -216,13 +216,17 @@ const App = () => {
                     name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
                     email: session.user.email!,
                     avatarUrl: session.user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(session.user.email!)}`,
-                    role: 'Owner' // Default role for supabase auth owner
+                    role: 'Owner' 
                 };
                 setCurrentUser(userObj);
                 setStoredItemAndDispatchEvent('fintab_simulator_session', userObj);
             } else if (event === 'SIGNED_OUT') {
-                setCurrentUser(null);
-                setActiveBusinessId(null);
+                // Check if we are intentionally in demo mode before clearing
+                const isDemo = localStorage.getItem('fintab_active_business_id') === 'biz-demo';
+                if (!isDemo) {
+                  setCurrentUser(null);
+                  setActiveBusinessId(null);
+                }
             }
         });
 
@@ -257,13 +261,13 @@ const App = () => {
         }
     }, [activeBusinessId]);
 
-    // FIX: Translation logic to support flat keys in translations.ts
+    // FIX: Optimized and robust translation logic to support flat keys
     const t = useCallback((key: string) => {
         if (!key) return '';
-        const langData = translations[language] || translations['en'];
-        const normalizedKey = key.toLowerCase();
-        // Check exact match first, then case-insensitive match
-        return langData[key] || langData[normalizedKey] || key;
+        const dict = translations[language] || translations['en'];
+        // Try exact match, then case-insensitive match, then fallback to English
+        const found = dict[key] || dict[key.toLowerCase()] || translations['en'][key] || translations['en'][key.toLowerCase()];
+        return found || key;
     }, [language]);
 
     useEffect(() => {
