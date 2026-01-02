@@ -2,7 +2,7 @@
 // @ts-nocheck
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
-import { GoogleGenAI } from "@google/genai";
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { Product, CartItem, BusinessProfile, ReceiptSettingsData, Customer, Sale, User, ProductVariant, AdminBusinessData } from '../types';
 import { translations } from '../lib/translations';
 import { formatCurrency, setStoredItemAndDispatchEvent, getStoredItem } from '../lib/utils';
@@ -10,6 +10,7 @@ import { COUNTRIES, ChatBubbleIcon, PhoneIcon, EmailIcon, CartIcon, ChevronDownI
 import VariantSelectionModal from './VariantSelectionModal';
 import QuantityModal from './QuantityModal';
 import SearchInput from './SearchInput';
+import ModalShell from './ModalShell';
 
 const ArrowLeftIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -37,7 +38,11 @@ const PublicStorefront: React.FC = () => {
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [selectedProductForModal, setSelectedProductForModal] = useState<Product | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    
+    // Customer Info State
+    const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '', email: '' });
 
     const t = (key: string) => (translations as any).en[key] || key;
 
@@ -65,6 +70,69 @@ const PublicStorefront: React.FC = () => {
             return acc;
         }, {} as Record<string, Product[]>);
     }, [products]);
+
+    const handleSubmitOrder = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (isSubmitting || !businessId) return;
+        setIsSubmitting(true);
+
+        try {
+            // 1. Construct the Sale object for the order
+            const newOrder: Sale = {
+                id: `order-${Date.now()}`,
+                date: new Date().toISOString(),
+                items: JSON.parse(JSON.stringify(cart)),
+                customerId: `web-${Date.now()}`, // Temporary web identity
+                userId: 'system', // Remote origin
+                subtotal: subtotal,
+                tax: 0,
+                discount: 0,
+                total: subtotal,
+                status: 'client_order',
+                paymentMethod: 'Pending',
+                businessId: businessId,
+                businessName: profile.businessName,
+                // Embed customer contact for the merchant
+                verificationNote: `Remote Client: ${customerInfo.name} (${customerInfo.phone})`
+            };
+
+            // 2. Cloud Sync: Push to Supabase
+            if (isSupabaseConfigured) {
+                // Fetch current sales array from cloud to avoid data loss
+                const { data: currentRecord } = await supabase
+                    .from('fintab_records')
+                    .select('data')
+                    .eq('business_id', businessId)
+                    .eq('key', 'sales')
+                    .maybeSingle();
+
+                const existingSales = currentRecord?.data || [];
+                const updatedSales = [newOrder, ...existingSales];
+
+                // Upsert to Supabase
+                const { error } = await supabase
+                    .from('fintab_records')
+                    .upsert({
+                        business_id: businessId,
+                        key: 'sales',
+                        data: updatedSales,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'business_id,key' });
+
+                if (error) throw error;
+            }
+
+            // 3. Cleanup
+            setCart([]);
+            setIsOrderModalOpen(false);
+            setIsSuccessModalOpen(true);
+        } catch (error) {
+            console.error("Order Submission Failure:", error);
+            alert("Protocol Sync Error: Could not reach the business node. Please try again.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     if (isLoading) return <div className="flex items-center justify-center min-h-screen bg-gray-100"><div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
 
@@ -188,7 +256,7 @@ const PublicStorefront: React.FC = () => {
                                     <div className="space-y-6 max-h-[400px] overflow-y-auto custom-scrollbar no-scrollbar pr-4 mb-10">
                                         {cart.map((item, i) => (
                                             <div key={i} className="flex justify-between items-center group animate-fade-in">
-                                                <div>
+                                                <div className="min-w-0">
                                                     <p className="text-xs font-black uppercase tracking-tight truncate max-w-[180px] group-hover:text-primary transition-colors">{item.product.name}</p>
                                                     <p className="text-[9px] text-slate-400 uppercase font-bold mt-1">{item.quantity} Unit(s)</p>
                                                 </div>
@@ -209,6 +277,37 @@ const PublicStorefront: React.FC = () => {
                     </div>
                 </div>
             </main>
+
+            {/* Success Modal */}
+            <ModalShell isOpen={isSuccessModalOpen} onClose={() => setIsSuccessModalOpen(false)} title="Order Verified" description="Synchronized to business node" maxWidth="max-w-md">
+                <div className="text-center py-10">
+                    <div className="w-20 h-20 bg-emerald-500 rounded-[2rem] flex items-center justify-center text-white mx-auto mb-8 shadow-xl shadow-emerald-200">
+                        <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M5 13l4 4L19 7" /></svg>
+                    </div>
+                    <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Protocol Received</h3>
+                    <p className="text-sm font-medium text-slate-500 mt-4 leading-relaxed px-6">Your order has been transmitted to {profile.businessName}. They will contact you shortly to authorize fulfillment.</p>
+                    <button onClick={() => setIsSuccessModalOpen(false)} className="mt-10 w-full btn-base btn-primary py-5">Exit Protocol</button>
+                </div>
+            </ModalShell>
+
+            {/* Order Identity Modal */}
+            <ModalShell isOpen={isOrderModalOpen} onClose={() => setIsOrderModalOpen(false)} title="Authorize Order" description="Verify client identification" maxWidth="max-w-md">
+                <form onSubmit={handleSubmitOrder} className="space-y-6">
+                    <div>
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 mb-2 block">Client Full Name</label>
+                        <input required type="text" value={customerInfo.name} onChange={e => setCustomerInfo({...customerInfo, name: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all outline-none" placeholder="First Last" />
+                    </div>
+                    <div>
+                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1 mb-2 block">Mobile Contact</label>
+                        <input required type="tel" value={customerInfo.phone} onChange={e => setCustomerInfo({...customerInfo, phone: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all outline-none" placeholder="+1..." />
+                    </div>
+                    <div className="pt-4">
+                        <button type="submit" disabled={isSubmitting} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3">
+                            {isSubmitting ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'Finalize Submission'}
+                        </button>
+                    </div>
+                </form>
+            </ModalShell>
             
             <button onClick={() => setIsChatOpen(true)} className="fixed bottom-12 right-12 bg-primary text-white rounded-[2.5rem] p-8 shadow-2xl shadow-primary/30 hover:scale-110 active:scale-95 transition-all z-40 group">
                 <ChatBubbleIcon className="w-8 h-8 group-hover:rotate-12 transition-transform" />

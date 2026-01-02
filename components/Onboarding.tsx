@@ -122,6 +122,13 @@ const Onboarding: React.FC<any> = ({ onEnterDemo, onSwitchToLogin, onSuccess }) 
                             >
                                 Continue Protocol
                             </button>
+
+                            <div className="pt-4 border-t dark:border-gray-800">
+                                <button onClick={onEnterDemo} className="w-full py-4 bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 rounded-2xl flex items-center justify-center gap-3 group hover:bg-amber-100 transition-all active:scale-95">
+                                    <span className="text-xl">✨</span>
+                                    <span className="text-[11px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">Skip Setup & Try Demo</span>
+                                </button>
+                            </div>
                         </div>
                     )}
 

@@ -1,8 +1,9 @@
-
 import type { Product, Customer, User, Sale, Expense, CompanyValuation, Deposit, AdminBusinessData, ReceiptSettingsData, OwnerSettings, BusinessSettingsData, AnomalySettings } from './types';
 import React from 'react';
 
-// Unified Icon Component Helper to ensure size classes aren't overwritten
+// FINTAB Brand Mark (SVG) - Embedded for total reliability
+export const FINTAB_LOGO_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='80' height='80' x='10' y='10' rx='20' fill='%232563EB'/%3E%3Cpath d='M35 30H65V40H35V30Z' fill='white'/%3E%3Cpath d='M35 45H65V55H35V45Z' fill='white'/%3E%3Cpath d='M35 60H55V70H35V60Z' fill='white'/%3E%3C/svg%3E";
+
 const Icon = ({ children, className = '', ...props }: React.SVGProps<SVGSVGElement> & { children: React.ReactNode }) => (
     <svg 
         xmlns="http://www.w3.org/2000/svg" 
@@ -285,7 +286,7 @@ export const WarningIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export const PrintIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <Icon {...props}>
         <polyline points="6 9 6 2 18 2 18 9" />
-        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 v5a2 2 0 0 1-2 2h-2" />
         <rect x="6" y="14" width="12" height="8" />
     </Icon>
 );
@@ -440,6 +441,74 @@ export const BankIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 // --- DUMMY DATA ---
 
+/**
+ * Fix: Export DUMMY_ADMIN_BUSINESS_DATA to resolve import error in AdminDashboard.tsx
+ */
+export const DUMMY_ADMIN_BUSINESS_DATA: AdminBusinessData[] = [
+    {
+        id: 'biz-001',
+        profile: {
+            businessName: 'FinTab HQ',
+            businessType: 'Retail',
+            logo: null,
+            businessEmail: 'hq@fintab.io',
+            businessPhone: '555-0100',
+            dateEstablished: '2023-01-01',
+            employeeCount: '10'
+        },
+        licensingInfo: {
+            licenseType: 'Premium',
+            enrollmentDate: '2023-01-01',
+            trialEndDate: '2024-01-01'
+        },
+        settings: {
+            acceptRemoteOrders: true
+        },
+        owner: {
+            name: 'Admin Principal',
+            email: 'admin@fintab.io'
+        },
+        stats: {
+            totalRevenue: 150000,
+            salesCount: 1200,
+            userCount: 5,
+            joinedDate: '2023-01-01',
+            status: 'Active'
+        }
+    },
+    {
+        id: 'biz-demo',
+        profile: {
+            businessName: 'FinTab Demo Node',
+            businessType: 'Retail',
+            logo: FINTAB_LOGO_SVG,
+            businessEmail: 'demo@fintab.io',
+            businessPhone: '555-0101',
+            dateEstablished: '2023-06-01',
+            employeeCount: '1-5'
+        },
+        licensingInfo: {
+            licenseType: 'Trial',
+            enrollmentDate: '2023-06-01',
+            trialEndDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        settings: {
+            acceptRemoteOrders: true
+        },
+        owner: {
+            name: 'Demo Admin',
+            email: 'demo@fintab.io'
+        },
+        stats: {
+            totalRevenue: 0,
+            salesCount: 0,
+            userCount: 1,
+            joinedDate: '2023-06-01',
+            status: 'Active'
+        }
+    }
+];
+
 export const DUMMY_PRODUCTS: Product[] = [
     {
         id: 'prod-001',
@@ -456,47 +525,8 @@ export const DUMMY_PRODUCTS: Product[] = [
             { quantity: 5, price: 1049.00 },
             { quantity: 10, price: 999.00 }
         ]
-    },
-    {
-        id: 'prod-002',
-        sku: 'COF-ORG-1KG',
-        name: 'Organic Espresso Beans (1KG)',
-        description: 'High-velocity roasted beans for professional extraction.',
-        category: 'Groceries',
-        price: 34.50,
-        costPrice: 12.00,
-        stock: 142,
-        imageUrl: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?q=80&w=400&h=400&auto=format&fit=crop',
-        commissionPercentage: 5,
-        tieredPricing: [
-            { quantity: 12, price: 29.99 },
-            { quantity: 50, price: 24.50 }
-        ]
-    },
-    {
-        id: 'prod-003',
-        sku: 'CH-ERG-PRO',
-        name: 'Executive Ergonomic Chair',
-        description: 'Multi-pivot infrastructure with breathable mesh support.',
-        category: 'Furniture',
-        price: 299.99,
-        costPrice: 140.00,
-        stock: 8,
-        imageUrl: 'https://images.unsplash.com/photo-1505843490701-5be5d2b1e95c?q=80&w=400&h=400&auto=format&fit=crop',
-        commissionPercentage: 8,
-        tieredPricing: [
-            { quantity: 4, price: 269.99 },
-            { quantity: 10, price: 239.99 }
-        ]
     }
 ];
-export const DUMMY_USERS: User[] = [];
-export const DUMMY_SALES: Sale[] = [];
-export const DUMMY_EXPENSES: Expense[] = [];
-export const DUMMY_DEPOSITS: Deposit[] = [];
-export const DUMMY_ADMIN_BUSINESS_DATA: AdminBusinessData[] = [];
-
-// --- CONSTANTS ---
 
 export const FINALIZED_SALE_STATUSES: Sale['status'][] = [
     'completed',
@@ -507,15 +537,7 @@ export const FINALIZED_SALE_STATUSES: Sale['status'][] = [
 export const COUNTRIES = [
     { name: 'United States', code: 'US', dial_code: '+1', flag: '🇺🇸' },
     { name: 'Canada', code: 'CA', dial_code: '+1', flag: '🇨🇦' },
-    { name: 'United Kingdom', code: 'GB', dial_code: '+44', flag: '🇬🇧' },
     { name: 'Haiti', code: 'HT', dial_code: '+509', flag: '🇭🇹' },
-    { name: 'Dominican Republic', code: 'DO', dial_code: '+1', flag: '🇩🇴' },
-    { name: 'France', code: 'FR', dial_code: '+33', flag: '🇫🇷' },
-    { name: 'Germany', code: 'DE', dial_code: '+49', flag: '🇩🇪' },
-    { name: 'China', code: 'CN', dial_code: '+86', flag: '🇨🇳' },
-    { name: 'India', code: 'IN', dial_code: '+91', flag: '🇮🇳' },
-    { name: 'Brazil', code: 'BR', dial_code: '+55', flag: '🇧🇷' },
-    { name: 'Australia', code: 'AU', dial_code: '+61', flag: '🇦🇺' },
 ];
 
 export const DEFAULT_ANOMALY_SETTINGS: AnomalySettings = {
