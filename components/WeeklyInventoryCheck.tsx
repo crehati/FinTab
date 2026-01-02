@@ -28,25 +28,21 @@ const WeeklyInventoryCheckPage: React.FC<WeeklyInventoryCheckProps> = ({
     const [reportToShow, setReportToShow] = useState<WeeklyInventoryCheck | null>(null);
 
     const isOwnerOrAdmin = currentUser?.role === 'Owner' || currentUser?.role === 'Super Admin';
-    // Fix: Access workflowRoles from businessSettings and handle potentially undefined state
-    const workflowRoles = businessSettings?.workflowRoles || {};
+    const workflowRoles = businessSettings?.workflowRoles;
 
     const canSubmitCheck = useMemo(() => {
         if (isOwnerOrAdmin) return true;
-        // Fix: Property 'stockManager' does not exist on type '{}'. Using optional chaining.
-        return (workflowRoles?.stockManager || []).some(a => a.userId === currentUser?.id);
+        return workflowRoles?.stockManager?.some(a => a.userId === currentUser?.id) || false;
     }, [isOwnerOrAdmin, workflowRoles, currentUser?.id]);
 
     const canVerifyCheck = useMemo(() => {
         if (isOwnerOrAdmin) return true;
-        // Fix: Property 'stockVerifier' does not exist on type '{}'. Using optional chaining.
-        return (workflowRoles?.stockVerifier || []).some(a => a.userId === currentUser?.id);
+        return workflowRoles?.stockVerifier?.some(a => a.userId === currentUser?.id) || false;
     }, [isOwnerOrAdmin, workflowRoles, currentUser?.id]);
 
     const canApproveCheck = useMemo(() => {
         if (isOwnerOrAdmin) return true;
-        // Fix: Property 'stockApprover' does not exist on type '{}'. Using optional chaining.
-        return (workflowRoles?.stockApprover || []).some(a => a.userId === currentUser?.id);
+        return workflowRoles?.stockApprover?.some(a => a.userId === currentUser?.id) || false;
     }, [isOwnerOrAdmin, workflowRoles, currentUser?.id]);
 
     const selectAuditItems = useCallback(() => {
@@ -141,7 +137,6 @@ const WeeklyInventoryCheckPage: React.FC<WeeklyInventoryCheckProps> = ({
         setWeeklyChecks(prev => [newCheck, ...(prev || [])]);
         setIsAddModalOpen(false);
 
-        // Fix: Property 'stockVerifier' does not exist on type '{}'. Using optional chaining.
         const verifiers = workflowRoles?.stockVerifier?.map(a => a.userId) || [];
         (users || []).filter(u => u && (verifiers.includes(u.id) || u.role === 'Owner')).forEach(u => 
             createNotification(u.id, "Stock Audit Verification Needed", `Weekly inventory check for ${newCheck.date} requires a second signature.`, "action_required", "/weekly-inventory-check")

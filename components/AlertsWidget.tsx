@@ -15,11 +15,13 @@ interface AlertsWidgetProps {
 
 const AlertsWidget: React.FC<AlertsWidgetProps> = ({ alerts, onDismiss, onMarkRead, receiptSettings, currentUser, businessSettings }) => {
     const isOwner = currentUser.role === 'Owner' || currentUser.role === 'Super Admin';
-    const workflow = businessSettings?.workflowRoles || {};
+    const workflow = businessSettings?.workflowRoles;
 
     const activeAlerts = useMemo(() => {
         const filtered = alerts.filter(a => !a.isDismissed);
         if (isOwner) return filtered;
+
+        if (!workflow) return [];
 
         // Staff-specific filtering: Only show alerts relevant to their assigned roles
         return filtered.filter(alert => {
