@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { formatCurrency, getStoredItem } from '../lib/utils';
-import { AIIcon, CloseIcon, PlusIcon } from '../constants';
+import { AIIcon, CloseIcon, PlusIcon, WarningIcon } from '../constants';
 import type { User, Sale, Product, Expense, Customer, ExpenseRequest, CashCount, GoodsCosting, GoodsReceiving, AnomalyAlert, BusinessSettingsData, ReceiptSettingsData, AppPermissions } from '../types';
 import { hasAccess } from '../lib/permissions';
 
@@ -37,6 +37,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     const [isLoading, setIsLoading] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
 
+    const apiKey = process.env.API_KEY;
+
     const contextStr = useMemo(() => {
         const safeSales = sales || [];
         const safeProducts = products || [];
@@ -48,28 +50,22 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         str += `- Active Personnel: ${users?.length || 0} units\n`;
         str += `- Customer Registry: ${customers?.length || 0} identities\n`;
 
-        // 1. Inventory Summary
         const totalStock = safeProducts.reduce((s, p) => s + (p.stock || 0), 0);
         const lowStockCount = safeProducts.filter(p => (p.stock || 0) <= lowStockThreshold).length;
         str += `\n[INVENTORY STATUS]\n- SKU Count: ${safeProducts.length}\n- Total Units: ${totalStock}\n- Low Stock Alerts: ${lowStockCount}\n`;
 
-        // 2. Sales Summary
         const totalRev = safeSales.filter(s => s.status === 'completed').reduce((s, x) => s + x.total, 0);
         str += `\n[SALES PERFORMANCE]\n- Total Lifetime Sales: ${safeSales.length}\n- Verified Revenue: ${cs}${totalRev.toFixed(2)}\n`;
 
-        // 3. Expense Ledger
         const totalExp = safeExpenses.filter(e => e.status !== 'deleted').reduce((s, e) => s + e.amount, 0);
         str += `\n[EXPENSE LEDGER]\n- Active Debits: ${safeExpenses.length}\n- Total Outflow: ${cs}${totalExp.toFixed(2)}\n`;
 
-        // 4. Financial Health
         const netProfit = totalRev - totalExp;
         str += `\n[FINANCIAL HEALTH]\n- Current Net Balance: ${cs}${netProfit.toFixed(2)}\n`;
 
-        // 5. Security & Anomalies
         const activeAlerts = anomalyAlerts?.filter(a => !a.isDismissed).length || 0;
         str += `\n[SECURITY PROTOCOLS]\n- Unresolved Anomalies: ${activeAlerts}\n`;
 
-        // 6. Commissions
         if (hasAccess(currentUser, 'COMMISSIONS', 'view_all_commissions', permissions)) {
             const totalComm = safeSales.reduce((s, sale) => s + (sale.commission || 0), 0);
             str += `\n[COMMISSION DATA]\n- Total Staff Yield: ${cs}${totalComm.toFixed(2)}\n`;
@@ -80,6 +76,10 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
+        if (!apiKey) {
+            setMessages(prev => [...prev, { role: 'model', text: "Protocol Blocked: Gemini API Key is not configured in the Vercel environment variables." }]);
+            return;
+        }
 
         const currentInput = input;
         const newMessages = [...messages, { role: 'user' as const, text: currentInput }];
@@ -88,12 +88,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         setIsLoading(true);
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey: apiKey });
             const response = await ai.models.generateContent({
                 model: 'gemini-3-flash-preview',
                 contents: [{ role: 'user', parts: [{ text: `Context:\n${contextStr}\n\nUser Question: ${currentInput}` }] }],
                 config: {
-                    systemInstruction: "You are the FinTab Intelligence Agent. Help users analyze their business metrics and operational data. Be professional, data-driven, and concise. If sensitive profit data is requested, assume the operator has clearance unless the context explicitly shows [ACCESS DENIED]."
+                    systemInstruction: "You are the FinTab Intelligence Agent. Help users analyze their business metrics and operational data. Be professional, data-driven, and concise. If sensitive profit data is requested, assume the operator has clearance."
                 }
             });
 
@@ -123,6 +123,13 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                     </div>
                 </div>
             </header>
+
+            {!apiKey && (
+                <div className="bg-rose-50 p-4 border-b border-rose-100 flex items-center gap-3">
+                    <WarningIcon className="w-5 h-5 text-rose-500" />
+                    <p className="text-[10px] font-black text-rose-600 uppercase tracking-tight">System Notice: AI API Key missing from Vercel Node.</p>
+                </div>
+            )}
 
             <main className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                 {messages.length === 0 && (

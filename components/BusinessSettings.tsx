@@ -4,20 +4,9 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { BusinessSettingsData, BusinessProfile, User, WorkflowRoleKey, WorkflowRoleAssignment, AnomalySettings } from '../types';
 import Card from './Card';
 import DestructiveConfirmationModal from './DestructiveConfirmationModal';
+import { notify } from './Toast';
 import { CreditCardIcon, TruckIcon, CalculatorIcon, PlusIcon, DeleteIcon, ChevronDownIcon, InvestorIcon, BuildingIcon, StorefrontIcon, ProfileIcon, CloseIcon, COUNTRIES, LightBulbIcon, WarningIcon } from '../constants';
 import { ShieldCheckIcon } from './Permissions';
-
-interface BusinessSettingsProps {
-    settings: BusinessSettingsData;
-    onUpdateSettings: (settings: BusinessSettingsData) => void;
-    businessProfile: BusinessProfile | null;
-    onUpdateBusinessProfile: (profile: BusinessProfile | null) => void;
-    onResetBusiness: () => void;
-    t: (key: string) => string;
-    currentUser: User;
-    onUpdateCurrentUserProfile: (profileData: { name?: string; avatarUrl?: string; phone?: string; initialInvestment?: number; }) => void;
-    users: User[];
-}
 
 // Fix: Declaring children as optional in SectionErrorBoundaryProps to resolve missing property error in JSX
 interface SectionErrorBoundaryProps {
@@ -133,6 +122,7 @@ const BusinessSettings: React.FC<BusinessSettingsProps> = ({ settings, onUpdateS
     const [copySuccess, setCopySuccess] = useState('');
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
+    const [isSaving, setIsSaving] = useState(false);
     
     const businessLogoInputRef = useRef<HTMLInputElement>(null);
     const ownerAvatarInputRef = useRef<HTMLInputElement>(null);
@@ -222,14 +212,18 @@ const BusinessSettings: React.FC<BusinessSettingsProps> = ({ settings, onUpdateS
         if (newPaymentMethod.trim() && !(draftSettings.paymentMethods || []).includes(newPaymentMethod.trim())) {
             setDraftSettings((prev: any) => ({ ...prev, paymentMethods: [...(prev.paymentMethods || []), newPaymentMethod.trim()] }));
             setNewPaymentMethod('');
+            notify(`Method Enrolled: ${newPaymentMethod.trim()}`, "info");
         }
     };
 
     const handleRemovePaymentMethod = (methodToRemove: string) => {
         setDraftSettings((prev: any) => ({ ...prev, paymentMethods: (prev.paymentMethods || []).filter((method: string) => method !== methodToRemove) }));
+        notify("Payment Protocol Purged", "info");
     };
     
     const handleSave = () => {
+        if (isSaving) return;
+        setIsSaving(true);
         try {
             if (currentUser.role === 'Owner') {
                 const ownerFullPhoneNumber = `${ownerPhone.countryCode}${ownerPhone.localPhone.replace(/\D/g, '')}`;
@@ -249,19 +243,22 @@ const BusinessSettings: React.FC<BusinessSettingsProps> = ({ settings, onUpdateS
             };
             onUpdateSettings(settingsToSave);
             onUpdateBusinessProfile(draftProfile as BusinessProfile | null);
-            alert('Protocol Sync Successful: Terminal settings updated.');
+            notify("Grid Configuration Synced", "success");
         } catch (err) {
             console.error("Save failure:", err);
-            alert("Digital Logic Error: Could not commit settings to local ledger.");
+            notify("Sync Error: Ledger Locked", "error");
+        } finally {
+            setIsSaving(false);
         }
     };
 
     const handleCopyLink = () => {
         navigator.clipboard.writeText(shopfrontUrl).then(() => {
-            setCopySuccess(t('shopfront.copied'));
+            setCopySuccess('COPIED');
+            notify("Gateway Link Copied", "info");
             setTimeout(() => setCopySuccess(''), 2000);
         }, () => {
-            alert('Communication failure: Could not copy link.');
+            notify("Copy Protocol Failed", "error");
         });
     };
 
@@ -281,6 +278,7 @@ const BusinessSettings: React.FC<BusinessSettingsProps> = ({ settings, onUpdateS
         }
 
         setDraftSettings({ ...draftSettings, workflowRoles: currentRoles });
+        notify("Authorization Delegated", "success");
     };
 
     const handleRemoveWorkflowRoleAssignment = (roleKey: WorkflowRoleKey, userId: string) => {
@@ -288,6 +286,7 @@ const BusinessSettings: React.FC<BusinessSettingsProps> = ({ settings, onUpdateS
         const assignments = currentRoles[roleKey] || [];
         currentRoles[roleKey] = assignments.filter((a: any) => a.userId !== userId);
         setDraftSettings({ ...draftSettings, workflowRoles: currentRoles });
+        notify("Authorization Revoked", "info");
     };
 
     const copyDiagnostics = () => {
@@ -299,7 +298,7 @@ const BusinessSettings: React.FC<BusinessSettingsProps> = ({ settings, onUpdateS
             errors: sectionErrors,
             version: "FT-OS-1.0.4"
         };
-        navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => alert("Diagnostic payload copied to clipboard."));
+        navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => notify("Diagnostic Payload Exported", "success"));
     };
 
     const isPrivileged = currentUser.role === 'Owner' || currentUser.role === 'Super Admin';
@@ -533,12 +532,11 @@ const BusinessSettings: React.FC<BusinessSettingsProps> = ({ settings, onUpdateS
                 </SectionErrorBoundary>
             </div>
 
-            {/* Principal Command Center (Fixed) */}
+            {/* Principal Command Center */}
             <div className="fixed bottom-24 right-6 lg:bottom-12 lg:right-12 z-[50] flex flex-col items-end gap-4">
                 {showDiagnostics && (
                     <div className="bg-slate-900 text-white p-8 rounded-[2.5rem] shadow-2xl border border-white/10 w-full max-w-sm mb-4 animate-scale-in">
                         <div className="flex justify-between items-center mb-6">
-                            {/* Fix: Added missing opening tag for h4 element */}
                             <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Terminal Diagnostics</h4>
                             <button onClick={() => setShowDiagnostics(false)}><CloseIcon className="w-4 h-4 text-slate-500" /></button>
                         </div>
@@ -556,8 +554,12 @@ const BusinessSettings: React.FC<BusinessSettingsProps> = ({ settings, onUpdateS
                             <LightBulbIcon className="w-6 h-6" />
                         </button>
                     )}
-                    <button onClick={handleSave} className="px-12 py-5 bg-primary text-white rounded-3xl font-black uppercase text-[11px] tracking-[0.2em] shadow-2xl shadow-primary/30 hover:bg-blue-700 hover:-translate-y-1 transition-all active:translate-y-0 active:scale-95">
-                        Authorize Global Sync
+                    <button 
+                        onClick={handleSave} 
+                        disabled={isSaving}
+                        className="px-12 py-5 bg-primary text-white rounded-3xl font-black uppercase text-[11px] tracking-[0.2em] shadow-2xl shadow-primary/30 hover:bg-blue-700 hover:-translate-y-1 transition-all active:translate-y-0 active:scale-95 disabled:opacity-50"
+                    >
+                        {isSaving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'Authorize Global Sync'}
                     </button>
                 </div>
             </div>

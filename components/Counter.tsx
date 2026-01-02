@@ -51,7 +51,6 @@ const CounterContent: React.FC<CounterProps> = (props) => {
     
     const [checkoutStatus, setCheckoutStatus] = useState<'idle' | 'pending_confirmation' | 'processing' | 'completed' | 'error'>('idle');
     const [completedSale, setCompletedSale] = useState<Sale | null>(null);
-    const [proformaInvoice, setProformaInvoice] = useState<Sale | null>(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [isBankModalOpen, setIsBankModalOpen] = useState(false);
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
@@ -113,13 +112,13 @@ const CounterContent: React.FC<CounterProps> = (props) => {
         if (!canCreateSale) { setValidationError("Unauthorized Protocol: Access to 'Create Sale' denied."); return; }
         if (checkoutStatus === 'processing') return;
 
-        if (!cart || cart.length === 0) { setValidationError("Protocol Violation: Digital basket is empty."); return; }
-        if (!selectedCustomerId) { setValidationError("Identity verification required: select a client."); return; }
-        if (!selectedUserId) { setValidationError("Processing entity required: select a staff member."); return; }
-        if (!paymentMethod) { setValidationError("Financial protocol required: select a payment method."); return; }
+        if (!cart || cart.length === 0) { setValidationError("Digital basket is empty."); return; }
+        if (!selectedCustomerId) { setValidationError("Client identification required."); return; }
+        if (!selectedUserId) { setValidationError("Auth agent selection required."); return; }
+        if (!paymentMethod) { setValidationError("Payment protocol selection required."); return; }
         
-        if (paymentMethod === 'Bank Receipt' && !canUseBank) { setValidationError("Unauthorized: Bank Transfer protocol disabled for your role."); return; }
-        if (paymentMethod === 'Cash' && !canUseCash) { setValidationError("Unauthorized: Cash settlement disabled for your role."); return; }
+        if (paymentMethod === 'Bank Receipt' && !canUseBank) { setValidationError("Bank Transfer protocol unauthorized."); return; }
+        if (paymentMethod === 'Cash' && !canUseCash) { setValidationError("Cash settlement protocol unauthorized."); return; }
 
         setValidationError('');
         setCommitSnapshot({ 
@@ -184,54 +183,54 @@ const CounterContent: React.FC<CounterProps> = (props) => {
     };
 
     return (
-        <div className="max-w-4xl mx-auto space-y-xl font-sans pb-24">
-            <Card title={t('counter.title')} className="flex flex-col relative" headerContent={
+        <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8 font-sans pb-32 sm:pb-24 px-2">
+            <Card title={t('counter.title')} className="flex flex-col relative rounded-[2.5rem]" headerContent={
                 cart.length > 0 && (
-                    <button onClick={() => setIsClearConfirmOpen(true)} className="px-md py-xs bg-rose-50 text-rose-600 text-[10px] font-bold uppercase rounded-lg hover:bg-rose-100">Reset Terminal</button>
+                    <button onClick={() => setIsClearConfirmOpen(true)} className="px-4 py-1.5 bg-rose-50 text-rose-600 text-[10px] font-black uppercase rounded-xl hover:bg-rose-100 transition-all">Clear Node</button>
                 )
             }>
-                <div className="flex-grow overflow-y-auto -mx-lg px-lg min-h-[300px]">
+                <div className="flex-grow overflow-y-auto -mx-4 sm:-mx-8 px-4 sm:px-8 min-h-[250px] sm:min-h-[300px]">
                     {validationError && (
-                        <div className="mb-6 p-5 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-4 animate-shake">
-                            <WarningIcon className="w-5 h-5 text-rose-500 mt-0.5" />
-                            <p className="text-xs font-black text-rose-600 uppercase tracking-tight leading-relaxed">{validationError}</p>
+                        <div className="mb-6 p-4 sm:p-5 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-4 animate-shake">
+                            <WarningIcon className="w-5 h-5 text-rose-500 mt-0.5 flex-shrink-0" />
+                            <p className="text-[10px] sm:text-xs font-black text-rose-600 uppercase tracking-tight leading-relaxed">{validationError}</p>
                         </div>
                     )}
 
                     {cart.length === 0 ? (
-                        <div className="text-center py-xxl flex flex-col items-center justify-center opacity-40">
-                            <div className="bg-slate-50 p-xl rounded-full mb-lg"><CartIcon className="h-16 w-16 text-slate-300" /></div>
-                            <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">Digital Basket Empty</p>
+                        <div className="text-center py-16 sm:py-24 flex flex-col items-center justify-center opacity-30">
+                            <div className="bg-slate-50 dark:bg-gray-800 p-8 rounded-full mb-6 sm:mb-8"><CartIcon className="h-12 w-12 sm:h-16 w-16 text-slate-300" /></div>
+                            <p className="font-black text-slate-400 uppercase tracking-[0.4em] text-[9px] sm:text-[10px]">Digital Basket Empty</p>
                         </div>
                     ) : (
-                        <ul className="divide-y divide-slate-50">
+                        <ul className="divide-y divide-slate-50 dark:divide-gray-800">
                             {cart.map((item, idx) => {
                                 const price = item.variant ? (Number(item.variant.price) || 0) : getEffectivePrice(item.product, item.quantity);
                                 return (
-                                <li key={`${item.product.id}-${idx}`} className="py-md flex items-center group">
-                                    <div className="relative">
-                                        <img src={String(item.product.imageUrl)} className="w-20 h-20 rounded-2xl object-cover shadow-sm border border-slate-100" />
-                                        {item.variant && <div className="absolute -top-2 -right-2 bg-primary text-white text-[8px] font-bold px-sm py-xs rounded-lg uppercase">Variant</div>}
+                                <li key={`${item.product.id}-${idx}`} className="py-4 sm:py-6 flex items-center group">
+                                    <div className="relative flex-shrink-0">
+                                        <img src={String(item.product.imageUrl)} className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover shadow-sm border border-slate-100 dark:border-gray-700" />
+                                        {item.variant && <div className="absolute -top-1 -right-1 bg-primary text-white text-[7px] font-black px-2 py-0.5 rounded-lg uppercase">Variant</div>}
                                     </div>
-                                    <div className="ml-lg flex-grow">
-                                        <p className="font-bold text-slate-900 uppercase tracking-tighter text-sm line-clamp-1">{String(item.product.name)}</p>
-                                        <div className="flex items-center gap-sm mt-sm">
-                                            <span className="text-xs font-bold text-slate-900">{cs}{price.toFixed(2)}</span>
-                                            {item.product.tieredPricing && item.product.tieredPricing.length > 0 && Number(item.quantity) >= Math.min(...item.product.tieredPricing.map(tp => tp.quantity)) && (
-                                                <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Bulk Rate Active</span>
+                                    <div className="ml-4 sm:ml-6 flex-grow min-w-0">
+                                        <p className="font-bold text-slate-900 dark:text-white uppercase tracking-tighter text-xs sm:text-sm truncate">{String(item.product.name)}</p>
+                                        <div className="flex items-center gap-2 mt-1 sm:mt-2">
+                                            <span className="text-[10px] sm:text-xs font-bold text-slate-900 dark:text-slate-300">{cs}{price.toFixed(2)}</span>
+                                            {item.product.tieredPricing?.length > 0 && Number(item.quantity) >= Math.min(...item.product.tieredPricing.map(tp => tp.quantity)) && (
+                                                <span className="text-[7px] sm:text-[8px] font-black text-emerald-500 uppercase tracking-widest">Bulk Rate</span>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="flex items-center bg-slate-50 dark:bg-gray-900 rounded-2xl p-xs gap-xs border border-slate-100 dark:border-gray-700">
-                                        <button onClick={() => onUpdateCartItem(item.product, item.variant, item.quantity - 1)} className="w-10 h-10 rounded-xl text-lg font-bold text-slate-400 hover:text-primary transition-colors">-</button>
+                                    <div className="flex items-center bg-slate-50 dark:bg-gray-900 rounded-2xl p-1 gap-1 border border-slate-100 dark:border-gray-800 flex-shrink-0">
+                                        <button onClick={() => onUpdateCartItem(item.product, item.variant, item.quantity - 1)} className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl text-lg font-bold text-slate-400 hover:text-primary transition-colors">-</button>
                                         <input 
                                             type="number" 
                                             value={item.quantity} 
                                             onChange={(e) => onUpdateCartItem(item.product, item.variant, parseInt(e.target.value) || 0)}
                                             onFocus={(e) => e.target.select()}
-                                            className="w-12 h-10 text-center font-black text-slate-900 dark:text-white text-sm bg-white dark:bg-gray-800 border-none focus:ring-2 focus:ring-primary/20 rounded-lg tabular-nums outline-none"
+                                            className="w-10 h-8 sm:w-12 sm:h-10 text-center font-black text-slate-900 dark:text-white text-xs sm:text-sm bg-white dark:bg-gray-800 border-none focus:ring-0 rounded-lg tabular-nums outline-none"
                                         />
-                                        <button onClick={() => onUpdateCartItem(item.product, item.variant, item.quantity + 1)} className="w-10 h-10 rounded-xl text-lg font-bold text-slate-400 hover:text-primary transition-colors">+</button>
+                                        <button onClick={() => onUpdateCartItem(item.product, item.variant, item.quantity + 1)} className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl text-lg font-bold text-slate-400 hover:text-primary transition-colors">+</button>
                                     </div>
                                 </li>
                             )})}
@@ -239,36 +238,54 @@ const CounterContent: React.FC<CounterProps> = (props) => {
                     )}
                 </div>
                 {cart.length > 0 && (
-                    <div className="mt-xl border-t border-slate-100 pt-lg space-y-xl">
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-xl">
-                            <div className="space-y-md">
-                                <div className={`p-lg bg-slate-50 rounded-2xl border border-slate-100 ${!canApplyDiscount ? 'opacity-40 grayscale' : ''}`}>
-                                    <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-sm block px-xs">Applied Discount ({cs})</label>
-                                    <input type="number" disabled={!canApplyDiscount} value={discount} onChange={(e) => setDiscount(e.target.value)} onFocus={(e) => e.target.select()} className="w-full bg-white border-2 border-transparent focus:border-primary rounded-xl px-lg py-md text-sm font-bold text-slate-900 outline-none" />
-                                    {!canApplyDiscount && <p className="text-[8px] font-black text-rose-400 uppercase mt-2">Discount protocol locked</p>}
+                    <div className="mt-8 border-t border-slate-100 dark:border-gray-800 pt-6 sm:pt-8 space-y-6 sm:space-y-8">
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
+                            <div className="space-y-4 sm:space-y-6">
+                                <div className={`p-4 sm:p-6 bg-slate-50 dark:bg-gray-900 rounded-3xl border border-slate-100 dark:border-gray-800 ${!canApplyDiscount ? 'opacity-30 grayscale pointer-events-none' : ''}`}>
+                                    <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 block px-1">Global Deduction ({cs})</label>
+                                    <input type="number" value={discount} onChange={(e) => setDiscount(e.target.value)} onFocus={(e) => e.target.select()} className="w-full bg-white dark:bg-gray-800 border-2 border-transparent focus:border-primary rounded-2xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none transition-all" />
                                 </div>
-                                <div className="p-lg bg-slate-50 rounded-2xl border border-slate-100">
-                                    <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-sm block px-xs">Tax Rate (%)</label>
-                                    <input type="number" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} onFocus={(e) => e.target.select()} className="w-full bg-white border-2 border-transparent focus:border-primary rounded-xl px-lg py-md text-sm font-bold text-slate-900 outline-none" />
+                                <div className="p-4 sm:p-6 bg-slate-50 dark:bg-gray-900 rounded-3xl border border-slate-100 dark:border-gray-800">
+                                    <label className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 block px-1">Applied Tax (%)</label>
+                                    <input type="number" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} onFocus={(e) => e.target.select()} className="w-full bg-white dark:bg-gray-800 border-2 border-transparent focus:border-primary rounded-2xl px-4 py-3 text-sm font-bold text-slate-900 dark:text-white outline-none transition-all" />
                                 </div>
                             </div>
-                            <div className="bg-slate-900 rounded-[2.5rem] p-xl text-white shadow-2xl flex flex-col justify-between">
-                                <div className="space-y-sm">
-                                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-slate-400"><span>Subtotal</span><span>{cs}{subtotal.toFixed(2)}</span></div>
-                                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-rose-400"><span>Discount</span><span>-{cs}{numericDiscount.toFixed(2)}</span></div>
-                                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest text-blue-400"><span>Tax</span><span>+{cs}{tax.toFixed(2)}</span></div>
+                            <div className="bg-slate-900 rounded-[2.5rem] p-6 sm:p-8 text-white shadow-2xl flex flex-col justify-between relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-24 h-24 bg-primary/10 rounded-full -mr-12 -mt-12 blur-2xl"></div>
+                                <div className="space-y-3 sm:space-y-4 relative z-10">
+                                    <div className="flex justify-between text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-500"><span>Subtotal</span><span>{cs}{subtotal.toFixed(2)}</span></div>
+                                    <div className="flex justify-between text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-rose-500"><span>Deduction</span><span>-{cs}{numericDiscount.toFixed(2)}</span></div>
+                                    <div className="flex justify-between text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-blue-500"><span>Taxation</span><span>+{cs}{tax.toFixed(2)}</span></div>
                                 </div>
-                                <div className="mt-xl pt-lg border-t border-white/10 flex justify-between items-end"><span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Total</span><span className="text-4xl font-bold tracking-tighter tabular-nums">{cs}{total.toFixed(2)}</span></div>
+                                <div className="mt-8 pt-6 sm:pt-8 border-t border-white/5 flex justify-between items-end relative z-10">
+                                    <div>
+                                        <p className="text-[9px] sm:text-[11px] font-black uppercase tracking-[0.3em] text-slate-500">Final Sum</p>
+                                        <p className="text-3xl sm:text-5xl font-black tracking-tighter tabular-nums text-white mt-1">{cs}{total.toFixed(2)}</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div className="space-y-md">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-md">
-                                <button onClick={() => setIsCustomerSelectModalOpen(true)} className="w-full p-lg border-2 rounded-2xl bg-white text-slate-900 text-left font-bold uppercase text-[10px] tracking-widest border-slate-100 hover:border-slate-300 truncate">{selectedCustomer ? selectedCustomer.name : 'Choose Identity'}</button>
-                                <button onClick={() => setIsUserSelectModalOpen(true)} className="w-full p-lg border-2 rounded-2xl bg-white text-slate-900 text-left font-bold uppercase text-[10px] tracking-widest border-slate-100 hover:border-slate-300 truncate">{selectedUser ? selectedUser.name : 'Select Staff'}</button>
-                                <button onClick={() => setIsPaymentMethodSelectModalOpen(true)} className="w-full p-lg border-2 rounded-2xl bg-white text-slate-900 text-left font-bold uppercase text-[10px] tracking-widest border-slate-100 hover:border-slate-300 truncate">{paymentMethod ? paymentMethod : 'Method'}</button>
+                        <div className="space-y-4 sm:space-y-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <button onClick={() => setIsCustomerSelectModalOpen(true)} className="w-full p-4 sm:p-5 border-2 rounded-2xl bg-white dark:bg-gray-900 text-slate-900 dark:text-white text-left font-black uppercase text-[9px] sm:text-[10px] tracking-widest border-slate-100 dark:border-gray-800 hover:border-primary/40 truncate shadow-sm transition-all active:scale-95">
+                                    <span className="text-slate-400 block mb-1">Identity</span>
+                                    {selectedCustomer ? selectedCustomer.name : 'Select Client'}
+                                </button>
+                                <button onClick={() => setIsUserSelectModalOpen(true)} className="w-full p-4 sm:p-5 border-2 rounded-2xl bg-white dark:bg-gray-900 text-slate-900 dark:text-white text-left font-black uppercase text-[9px] sm:text-[10px] tracking-widest border-slate-100 dark:border-gray-800 hover:border-primary/40 truncate shadow-sm transition-all active:scale-95">
+                                    <span className="text-slate-400 block mb-1">Agent</span>
+                                    {selectedUser ? selectedUser.name : 'Select Staff'}
+                                </button>
+                                <button onClick={() => setIsPaymentMethodSelectModalOpen(true)} className="w-full p-4 sm:p-5 border-2 rounded-2xl bg-white dark:bg-gray-900 text-slate-900 dark:text-white text-left font-black uppercase text-[9px] sm:text-[10px] tracking-widest border-slate-100 dark:border-gray-800 hover:border-primary/40 truncate shadow-sm transition-all active:scale-95">
+                                    <span className="text-slate-400 block mb-1">Protocol</span>
+                                    {paymentMethod ? paymentMethod : 'Settlement'}
+                                </button>
                             </div>
-                            <button onClick={handleCheckout} className="btn-base btn-primary w-full py-5 text-sm" disabled={checkoutStatus === 'processing' || !canCreateSale}>
-                                {checkoutStatus === 'processing' ? 'Processing...' : 'Commit Protocol Sale'}
+                            <button 
+                                onClick={handleCheckout} 
+                                className="w-full py-5 sm:py-6 bg-primary text-white rounded-3xl font-black uppercase text-[11px] sm:text-[12px] tracking-[0.3em] shadow-2xl shadow-primary/30 active:scale-95 transition-all hover:bg-blue-700 disabled:opacity-30"
+                                disabled={checkoutStatus === 'processing' || !canCreateSale}
+                            >
+                                {checkoutStatus === 'processing' ? 'Processing Protocol...' : 'Authorize Transaction'}
                             </button>
                         </div>
                     </div>
@@ -282,7 +299,7 @@ const CounterContent: React.FC<CounterProps> = (props) => {
             <CustomerSelectionModal isOpen={isCustomerSelectModalOpen} onClose={() => setIsCustomerSelectModalOpen(false)} customers={customers} onSelect={(id) => { setSelectedCustomerId(id); setIsCustomerSelectModalOpen(false); }} onAddNew={() => { setIsCustomerSelectModalOpen(false); }} />
             <UserSelectionModal isOpen={isUserSelectModalOpen} onClose={() => setIsUserSelectModalOpen(false)} users={users} onSelect={(id) => { setSelectedUserId(id); setIsUserSelectModalOpen(false); }} />
             <PaymentMethodSelectionModal isOpen={isPaymentMethodSelectModalOpen} onClose={() => setIsPaymentMethodSelectModalOpen(false)} paymentMethods={businessSettings.paymentMethods || []} onSelect={(method) => { setPaymentMethod(method); setIsPaymentMethodSelectModalOpen(false); }} />
-            <ConfirmationModal isOpen={isClearConfirmOpen} onClose={() => setIsClearConfirmOpen(false)} onConfirm={() => { resetCounter(); setIsClearConfirmOpen(false); }} title="Reset Terminal" message="Abort transaction and clear basket protocol?" />
+            <ConfirmationModal isOpen={isClearConfirmOpen} onClose={() => setIsClearConfirmOpen(false)} onConfirm={() => { resetCounter(); setIsClearConfirmOpen(false); }} title="Reset Node" message="Abort current transaction protocol?" />
         </div>
     );
 };

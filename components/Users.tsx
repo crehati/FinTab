@@ -76,23 +76,12 @@ const Users: React.FC<UsersProps> = ({
         setIsUserModalOpen(true);
     };
 
-    const handleOpenIssuePayment = (user: User) => {
-        if (!hasAccess(currentUser, 'COMMISSIONS', 'approve_commission_withdrawal', permissions)) return;
-        setSelectedUser(user);
-        setIsIssuePaymentModalOpen(true);
-    }
-
-    const handleConfirmIssuePayment = (amount: number, description: string) => {
-        if (selectedUser) {
-            handleInitiateCustomPayment(selectedUser.id, amount, description);
-            setIsIssuePaymentModalOpen(false);
-        }
-    }
-
     const handleSaveUser = (userData: Omit<User, 'id' | 'avatarUrl'>, isEditing: boolean) => {
         onSaveUser(userData, isEditing, editingUser?.id);
-        setIsUserModalOpen(false);
-        setEditingUser(null);
+        if (isEditing) {
+            setIsUserModalOpen(false);
+            setEditingUser(null);
+        }
     };
 
     const handleDeleteClick = (user: User) => {
@@ -114,7 +103,6 @@ const Users: React.FC<UsersProps> = ({
     };
 
     const handleSavePermissions = (userId: string, userPermissions: UserPermissions, roleLabel: string) => {
-        const timestamp = new Date().toISOString();
         const updatedUsers = users.map(u => {
             if (u.id === userId) {
                 return { 
@@ -122,7 +110,7 @@ const Users: React.FC<UsersProps> = ({
                     permissions: userPermissions, 
                     role_label: roleLabel, 
                     permissions_version: 1,
-                    lastUpdated: timestamp
+                    lastUpdated: new Date().toISOString()
                 };
             }
             return u;
@@ -132,7 +120,6 @@ const Users: React.FC<UsersProps> = ({
         if (bizId) setStoredItemAndDispatchEvent(`fintab_${bizId}_users`, updatedUsers);
         
         setIsPermissionModalOpen(false);
-        window.location.reload(); 
     };
 
     const userPerformance = useMemo((): PerformanceUser[] => {
@@ -160,7 +147,7 @@ const Users: React.FC<UsersProps> = ({
                 <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-10 gap-6">
                     <div>
                         <h2 className="text-4xl font-black text-slate-900 dark:text-white uppercase tracking-tighter leading-none">Personnel</h2>
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-4">Terminal Authentication & Performance Roster</p>
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-4">Authorized Terminal Identities</p>
                     </div>
                     
                     <div className="flex bg-slate-50 dark:bg-gray-800 p-1.5 rounded-2xl shadow-inner border dark:border-gray-700">
@@ -185,14 +172,14 @@ const Users: React.FC<UsersProps> = ({
                             <>
                                 <div className="table-wrapper hidden md:block">
                                     <div className="table-container max-h-[600px]">
-                                        <table className="w-full">
-                                            <thead>
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-slate-50 dark:bg-gray-900 text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400">
                                                 <tr>
-                                                    <th scope="col">Unit Identity</th>
-                                                    <th scope="col" className="text-center">Auth Status</th>
-                                                    <th scope="col" className="text-center">Conversions</th>
-                                                    <th scope="col" className="text-right">Ledger Yield</th>
-                                                    {canManage && <th scope="col" className="text-center">Audit Protocols</th>}
+                                                    <th className="px-6 py-6">Unit Identity</th>
+                                                    <th className="px-6 py-6 text-center">Auth Status</th>
+                                                    <th className="px-6 py-6 text-center">Settlements</th>
+                                                    <th className="px-6 py-6 text-right">Ledger Yield</th>
+                                                    {canManage && <th className="px-6 py-6 text-center">Audit Protocols</th>}
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y">
@@ -258,14 +245,14 @@ const Users: React.FC<UsersProps> = ({
                             <>
                                 <div className="table-wrapper hidden md:block">
                                     <div className="table-container max-h-[600px]">
-                                        <table className="w-full">
-                                            <thead>
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-slate-50 dark:bg-gray-900 text-[10px] font-bold uppercase tracking-[0.25em] text-slate-400">
                                                 <tr>
-                                                    <th scope="col">Unit Identity</th>
-                                                    <th scope="col" className="text-center">Hourly Rate</th>
-                                                    <th scope="col" className="text-center">Accrued Quantum</th>
-                                                    <th scope="col" className="text-right">Settlement Due</th>
-                                                    {canManage && <th scope="col" className="text-center">Audit Protocols</th>}
+                                                    <th scope="col" className="px-6 py-6">Unit Identity</th>
+                                                    <th scope="col" className="px-6 py-6 text-center">Hourly Rate</th>
+                                                    <th scope="col" className="px-6 py-6 text-center">Accrued Quantum</th>
+                                                    <th scope="col" className="px-6 py-6 text-right">Settlement Due</th>
+                                                    {canManage && <th scope="col" className="px-6 py-6 text-center">Audit Protocols</th>}
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y">
@@ -300,7 +287,7 @@ const Users: React.FC<UsersProps> = ({
                                 </div>
                                 <div className="md:hidden space-y-4">
                                     {hourlyUsers.map(member => (
-                                        <div key={member.id} className="bg-slate-50 dark:bg-gray-800 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-gray-700">
+                                        <div key={member.id} className="bg-slate-50 dark:bg-gray-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-gray-700">
                                             <div className="flex justify-between items-start mb-5">
                                                 <div className="flex items-center gap-4">
                                                     <img src={member.avatarUrl} className="w-14 h-14 rounded-2xl object-cover border-2 border-white shadow-sm" />
@@ -339,10 +326,10 @@ const Users: React.FC<UsersProps> = ({
             </button>
 
             <UserDetailModal isOpen={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} user={selectedUser} sales={sales} expenses={[]} customers={customers} currentUser={currentUser} receiptSettings={receiptSettings} businessProfile={businessProfile} onClockInOut={() => {}} />
-            <UserModal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} onSave={handleSaveUser} userToEdit={editingUser} receiptSettings={receiptSettings} existingUsers={users} />
+            <UserModal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} onSave={handleSaveUser} userToEdit={editingUser} receiptSettings={receiptSettings} existingUsers={users} currentUser={currentUser} />
             <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setIsConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Revoke Access" message={`Confirm revocation of ${userToDelete?.name}'s terminal access?`} variant="danger" isIrreversible={true} confirmLabel="Revoke Access" />
             <UserPermissionModal isOpen={isPermissionModalOpen} onClose={() => setIsPermissionModalOpen(false)} onSave={handleSavePermissions} user={permissionEditingUser} />
-            <InitiatePaymentModal isOpen={isIssuePaymentModalOpen} onClose={() => setIsIssuePaymentModalOpen(false)} onConfirm={handleConfirmIssuePayment} userName={selectedUser?.name || ''} currencySymbol={cs} />
+            <InitiatePaymentModal isOpen={isIssuePaymentModalOpen} onClose={() => setIsIssuePaymentModalOpen(false)} onConfirm={(amt, desc) => { handleInitiateCustomPayment(selectedUser.id, amt, desc); setIsIssuePaymentModalOpen(false); }} userName={selectedUser?.name || ''} currencySymbol={cs} />
         </div>
     );
 };

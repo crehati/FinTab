@@ -15,12 +15,13 @@ import {
     FINALIZED_SALE_STATUSES,
     WarningIcon,
     CloseIcon,
-    DUMMY_PRODUCTS,
     FINTAB_LOGO_SVG
 } from './constants';
 import { DEFAULT_PERMISSIONS, hasAccess } from './lib/permissions';
 import { translations } from './lib/translations';
-import type { AppNotification, Sale, User, Withdrawal, Expense, ExpenseRequest, CashCount, GoodsCosting, GoodsReceiving, AnomalyAlert, WeeklyInventoryCheck, Product, ModuleKey, Customer, ProductVariant, CustomPayment, Deposit, StockAdjustment, CartItem, LicensingInfo, AppPermissions, BankAccount, BankTransaction, WorkflowRoleKey } from './types';
+import Toast, { notify } from './components/Toast';
+import JoinBusiness from './components/JoinBusiness';
+import type { AppNotification, Sale, User, Withdrawal, Expense, ExpenseRequest, CashCount, GoodsCosting, GoodsReceiving, AnomalyAlert, WeeklyInventoryCheck, Product, ModuleKey, Customer, ProductVariant, CustomPayment, Deposit, StockAdjustment, CartItem, LicensingInfo, AppPermissions, BankAccount, BankTransaction, WorkflowRoleKey, BusinessProfile, BusinessSettingsData, ReceiptSettingsData, OwnerSettings, PrinterSettingsData, AdminBusinessData } from './types';
 
 // Components
 import Dashboard from './components/Dashboard';
@@ -30,9 +31,6 @@ import Customers from './components/Customers';
 import Users from './components/Users';
 import Receipts from './components/Receipts';
 import Login from './components/Login';
-import Onboarding from './components/Onboarding';
-import BottomNavBar from './components/BottomNavBar';
-import AIAssistant from './components/AIAssistant';
 import Today from './components/Today';
 import Reports from './components/Reports';
 import Items from './components/Items';
@@ -49,11 +47,8 @@ import BusinessSettings from './components/BusinessSettings';
 import OwnerSettingsPage from './components/OwnerSettings';
 import PrinterSettings from './components/PrinterSettings';
 import NotificationCenter from './components/NotificationCenter';
-import AccessDenied from './components/AccessDenied';
-import GoBackButton from './components/GoBackButton';
 import SelectBusiness from './components/SelectBusiness';
 import Transactions from './components/Transactions';
-import InvestorPage from './components/Investor';
 import CashCountPage from './components/CashCount';
 import GoodsCostingPage from './components/GoodsCosting';
 import GoodsReceivingPage from './components/GoodsReceiving';
@@ -62,6 +57,7 @@ import Directory from './components/Directory';
 import AlertsPage from './components/AlertsPage';
 import PublicStorefront from './components/PublicStorefront';
 import BankAccountsPage from './components/BankAccounts';
+import AIAssistant from './components/AIAssistant';
 
 const ScrollToTop = () => {
     const { pathname } = useLocation();
@@ -73,46 +69,36 @@ const ScrollToTop = () => {
 };
 
 const Header = ({ currentUser, businessProfile, onMenuClick, notifications, cartCount, onMarkAsRead, onMarkAllAsRead, onClear, systemLogo }) => (
-    <header className="h-16 flex items-center justify-between px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-slate-100 dark:border-gray-800 z-50 sticky top-0 flex-shrink-0">
-        <div className="flex items-center gap-2 sm:gap-4">
-            <div className="flex items-center">
-                <button onClick={onMenuClick} className="lg:hidden p-2.5 text-slate-500 hover:bg-slate-50 dark:hover:bg-gray-800 rounded-2xl transition-all active:scale-95">
-                    <MenuIcon />
-                </button>
-                <GoBackButton />
-            </div>
-            <Link to="/dashboard" className="flex items-center gap-3 group transition-all">
-                <div className="w-8 h-8 rounded-lg overflow-hidden bg-slate-100 dark:bg-gray-800 flex items-center justify-center shadow-sm">
+    <header className="h-16 flex items-center justify-between px-4 sm:px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-slate-100 dark:border-gray-800 z-50 sticky top-0 flex-shrink-0">
+        <div className="flex items-center gap-2 sm:gap-4 overflow-hidden">
+            <button onClick={onMenuClick} className="lg:hidden p-2 text-slate-500 hover:bg-slate-50 dark:hover:bg-gray-800 rounded-xl transition-all active:scale-95">
+                <MenuIcon className="w-5 h-5" />
+            </button>
+            <Link to="/dashboard" className="flex items-center gap-2 sm:gap-3 group transition-all overflow-hidden">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden bg-slate-100 dark:bg-gray-800 flex items-center justify-center shadow-sm flex-shrink-0">
                     <img src={businessProfile?.logo || systemLogo} className="w-full h-full object-contain" alt="Logo" />
                 </div>
-                <div className="hidden sm:block">
-                    <h1 className="text-base font-black text-primary uppercase tracking-tight leading-none group-hover:text-blue-700 transition-colors">{businessProfile?.businessName || 'FinTab'}</h1>
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1.5 opacity-80">Authorized Node</p>
+                <div className="hidden xs:block truncate">
+                    <h1 className="text-sm sm:text-base font-black text-primary uppercase tracking-tight leading-none group-hover:text-blue-700 transition-colors truncate">{businessProfile?.businessName || 'FinTab'}</h1>
+                    <p className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1 opacity-80">Sync: Active</p>
                 </div>
             </Link>
         </div>
-        <div className="flex items-center gap-2 sm:gap-4">
-            {currentUser && (
-                <NotificationCenter 
-                    notifications={notifications} 
-                    onMarkAsRead={onMarkAsRead}
-                    onMarkAllAsRead={onMarkAllAsRead}
-                    onClear={onClear}
-                />
-            )}
-            <Link to="/counter" className="p-2.5 rounded-2xl text-slate-400 hover:text-primary hover:bg-slate-50 dark:hover:bg-gray-800 relative transition-all active:scale-95 group">
-                <CounterIcon className="w-6 h-6 transition-transform group-hover:-rotate-6" />
-                {cartCount > 0 && <span className="absolute top-1.5 right-1.5 badge-standard bg-primary scale-75 border-2 border-white dark:border-gray-900">{cartCount}</span>}
+        <div className="flex items-center gap-1 sm:gap-4">
+            <NotificationCenter notifications={notifications} onMarkAsRead={onMarkAsRead} onMarkAllAsRead={onMarkAllAsRead} onClear={onClear} />
+            <Link to="/counter" className="p-2 sm:p-2.5 rounded-xl text-slate-400 hover:text-primary hover:bg-slate-50 dark:hover:bg-gray-800 relative transition-all active:scale-95 group">
+                <CounterIcon className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:-rotate-6" />
+                {cartCount > 0 && <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 bg-rose-500 text-white text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full border-2 border-white dark:border-gray-900">{cartCount}</span>}
             </Link>
-            <div className="h-8 w-px bg-slate-100 dark:border-gray-800 mx-1 opacity-60"></div>
-            <Link to="/profile" className="flex items-center gap-3 pl-2 group transition-all">
-                <div className="relative">
-                    <img src={currentUser?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.name || 'User')}`} className="w-9 h-9 rounded-2xl object-cover shadow-sm border-2 border-white dark:border-gray-800 group-hover:border-primary transition-all duration-300" />
-                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-50 border-2 border-white dark:border-gray-900 rounded-full shadow-sm"></div>
+            <div className="h-6 w-px bg-slate-100 dark:bg-gray-800 mx-1"></div>
+            <Link to="/profile" className="flex items-center gap-2 sm:gap-3 group transition-all">
+                <div className="relative flex-shrink-0">
+                    <img src={currentUser?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.name || 'User')}`} className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover shadow-sm border-2 border-white dark:border-gray-800" />
+                    <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-gray-900 rounded-full"></div>
                 </div>
-                <div className="hidden md:block text-left">
-                    <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight group-hover:text-primary transition-colors">{currentUser?.name || 'Terminal'}</p>
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1 opacity-70">{currentUser?.role || 'Guest'}</p>
+                <div className="hidden md:block text-left max-w-[100px]">
+                    <p className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight truncate">{currentUser?.name?.split(' ')[0] || 'User'}</p>
+                    <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-0.5 opacity-70">{currentUser?.role}</p>
                 </div>
             </Link>
         </div>
@@ -120,19 +106,16 @@ const Header = ({ currentUser, businessProfile, onMenuClick, notifications, cart
 );
 
 export class ErrorBoundary extends React.Component<{ children?: React.ReactNode }, { hasError: boolean }> {
-    constructor(props: { children?: React.ReactNode }) {
-        super(props);
-        this.state = { hasError: false };
-    }
+    constructor(props: { children?: React.ReactNode }) { super(props); this.state = { hasError: false }; }
     static getDerivedStateFromError() { return { hasError: true }; }
     render() {
         if (this.state.hasError) {
             return (
-                <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-950 p-8 font-sans">
+                <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-950 p-6 font-sans">
                     <div className="max-w-md w-full bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-2xl p-10 text-center border border-rose-100 dark:border-rose-900/30">
                         <div className="w-20 h-20 bg-rose-50 dark:bg-rose-950/20 rounded-3xl flex items-center justify-center mx-auto mb-6 text-rose-500"><WarningIcon className="w-10 h-10" /></div>
-                        <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4">System Critical Halt</h2>
-                        <button onClick={() => window.location.reload()} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Re-Initialize Node</button>
+                        <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4">Core Protocol Failure</h2>
+                        <button onClick={() => { localStorage.clear(); window.location.href = '/'; }} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Emergency Node Reset</button>
                     </div>
                 </div>
             );
@@ -142,28 +125,12 @@ export class ErrorBoundary extends React.Component<{ children?: React.ReactNode 
 }
 
 const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
-    const [isVisible, setIsVisible] = useState(true);
-
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setIsVisible(false);
-            setTimeout(onComplete, 1000); 
-        }, 3000);
-        return () => clearTimeout(timer);
-    }, [onComplete]);
-
-    if (!isVisible) return null;
-
+    useEffect(() => { const timer = setTimeout(onComplete, 2000); return () => clearTimeout(timer); }, [onComplete]);
     return (
         <div className="fixed inset-0 bg-slate-950 z-[100] flex flex-col items-center justify-center">
-            <div className="w-32 h-32 mb-8 animate-pulse">
-                <img src={FINTAB_LOGO_SVG} alt="FinTab Logo" className="w-full h-full" />
-            </div>
-            <h1 className="text-4xl font-black text-white tracking-[0.4em] mb-4">FINTAB</h1>
-            <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-primary animate-[loading-bar_3s_ease-in-out_infinite]" style={{ width: '100%' }} />
-            </div>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.5em] mt-8">Initializing Node...</p>
+            <div className="w-32 h-32 mb-8 animate-pulse"><img src={FINTAB_LOGO_SVG} alt="FinTab" className="w-full h-full" /></div>
+            <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-primary animate-[loading-bar_2s_ease-in-out_infinite]" style={{ width: '100%' }} /></div>
+            <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.5em] mt-8">Initializing Terminal Node...</p>
         </div>
     );
 };
@@ -174,17 +141,24 @@ const App = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(getStoredItem('fintab_simulator_session', null));
     const [activeBusinessId, setActiveBusinessId] = useState<string | null>(localStorage.getItem('fintab_active_business_id'));
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [language, setLanguage] = useState(localStorage.getItem('fintab_lang') || 'en');
-    const [theme, setTheme] = useState<'light' | 'dark'>(localStorage.getItem('fintab_theme') === 'dark' ? 'dark' : 'light');
+    
+    // Identity-Locked States
+    const [language, setLanguage] = useState(() => {
+        const bid = localStorage.getItem('fintab_active_business_id');
+        return localStorage.getItem(bid ? `fintab_${bid}_lang` : 'fintab_lang') || 'en';
+    });
+    const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+        const bid = localStorage.getItem('fintab_active_business_id');
+        return (localStorage.getItem(bid ? `fintab_${bid}_theme` : 'fintab_theme') === 'dark') ? 'dark' : 'light';
+    });
 
-    // Data State (Scoped by Business ID)
+    // Operational Data State
     const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
     const [businessSettings, setBusinessSettings] = useState<BusinessSettingsData>(DEFAULT_BUSINESS_SETTINGS);
     const [receiptSettings, setReceiptSettings] = useState<ReceiptSettingsData>(DEFAULT_RECEIPT_SETTINGS);
     const [ownerSettings, setOwnerSettings] = useState<OwnerSettings>(DEFAULT_OWNER_SETTINGS);
     const [permissions, setPermissions] = useState<AppPermissions>(DEFAULT_PERMISSIONS);
     const [printerSettings, setPrinterSettings] = useState<PrinterSettingsData>({ autoPrint: false });
-    
     const [products, setProducts] = useState<Product[]>([]);
     const [sales, setSales] = useState<Sale[]>([]);
     const [customers, setCustomers] = useState<Customer[]>([]);
@@ -204,357 +178,205 @@ const App = () => {
 
     const systemLogo = getSystemLogo();
 
-    // AUTH LISTENER FOR SUPABASE
-    useEffect(() => {
-        if (!isSupabaseConfigured) return;
+    // HARD-LOCK SYNC ENGINE
+    const persistData = async (key: string, data: any, silent = true) => {
+        if (!activeBusinessId) return;
+        setStoredItemAndDispatchEvent(`fintab_${activeBusinessId}_${key}`, data);
+        if (isSupabaseConfigured) {
+            try {
+                const { error } = await supabase.from('fintab_records').upsert({
+                    business_id: activeBusinessId,
+                    key: key,
+                    data: data,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'business_id,key' });
+                if (error) console.error(`Sync Failure [${key}]:`, error.message);
+                else if (!silent) notify(`Node Synced: ${key}`, "success");
+            } catch (err) { console.error(`Sync Breach [${key}]:`, err); }
+        }
+    };
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (session?.user) {
-                // If logged in via Supabase, we derive the user object
-                const userObj = {
-                    id: session.user.id,
-                    name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-                    email: session.user.email!,
-                    avatarUrl: session.user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(session.user.email!)}`,
-                    role: 'Owner' 
-                };
-                setCurrentUser(userObj);
-                setStoredItemAndDispatchEvent('fintab_simulator_session', userObj);
-            } else if (event === 'SIGNED_OUT') {
-                // Check if we are intentionally in demo mode before clearing
-                const isDemo = localStorage.getItem('fintab_active_business_id') === 'biz-demo';
-                if (!isDemo) {
-                  setCurrentUser(null);
-                  setActiveBusinessId(null);
+    const fetchAllBusinessData = async (bid: string) => {
+        if (!isSupabaseConfigured || !bid) return;
+        try {
+            const { data, error } = await supabase.from('fintab_records').select('key, data').eq('business_id', bid);
+            if (error) throw error;
+            if (!data) return;
+            data.forEach(record => {
+                const { key, data: val } = record;
+                localStorage.setItem(`fintab_${bid}_${key}`, JSON.stringify(val));
+                switch(key) {
+                    case 'profile': setBusinessProfile(val); break;
+                    case 'settings': setBusinessSettings(val); break;
+                    case 'receipt_settings': setReceiptSettings(val); break;
+                    case 'owner_settings': setOwnerSettings(val); break;
+                    case 'permissions': setPermissions(val); break;
+                    case 'products': setProducts(val); break;
+                    case 'sales': setSales(val); break;
+                    case 'customers': setCustomers(val); break;
+                    case 'users': setUsers(val); break;
+                    case 'expenses': setExpenses(val); break;
+                    case 'expense_requests': setExpenseRequests(val); break;
+                    case 'deposits': setDeposits(val); break;
+                    case 'cash_counts': setCashCounts(val); break;
+                    case 'goods_costings': setGoodsCostings(val); break;
+                    case 'goods_receivings': setGoodsReceivings(val); break;
+                    case 'weekly_checks': setWeeklyChecks(val); break;
+                    case 'bank_accounts': setBankAccounts(val); break;
+                    case 'bank_transactions': setBankTransactions(val); break;
+                    case 'notifications': setNotifications(val); break;
+                    case 'printer_settings': setPrinterSettings(val); break;
+                    case 'anomaly_alerts': setAnomalyAlerts(val); break;
+                    case 'lang': setLanguage(val); break;
+                    case 'theme': setTheme(val); break;
                 }
-            }
-        });
+            });
+        } catch (err) { console.error("Identity Recovery Failed:", err); }
+    };
 
+    // PROTOCOL HANDLERS (With Mandatory Notifications)
+    const handleUpdateProducts = (p: Product[]) => { setProducts(p); persistData('products', p); notify("Inventory Synced", "success"); };
+    const handleUpdateSales = (s: Sale[]) => { setSales(s); persistData('sales', s); notify("Ledger Updated", "success"); };
+    const handleUpdateCustomers = (c: Customer[]) => { setCustomers(c); persistData('customers', c); notify("Client Node Verified", "success"); };
+    const handleUpdateUsers = (u: User[]) => { setUsers(u); persistData('users', u); notify("Staff Registry Synced", "success"); };
+    const handleUpdateExpenses = (e: Expense[]) => { setExpenses(e); persistData('expenses', e); notify("Debit Ledger Locked", "success"); };
+    const handleUpdateExpenseRequests = (r: ExpenseRequest[]) => { setExpenseRequests(r); persistData('expense_requests', r); notify("Request Transmitted", "info"); };
+    const handleUpdateDeposits = (d: Deposit[]) => { setDeposits(d); persistData('deposits', d); notify("Liquidity Logged", "info"); };
+    const handleUpdateBankAccounts = (b: BankAccount[]) => { setBankAccounts(b); persistData('bank_accounts', b); notify("Treasury Nodes Synced", "success"); };
+    const handleUpdateBankTransactions = (t: BankTransaction[]) => { setBankTransactions(t); persistData('bank_transactions', t); };
+    const handleUpdateCashCounts = (c: CashCount[]) => { setCashCounts(c); persistData('cash_counts', c); notify("Audit Signature Recorded", "success"); };
+    const handleUpdateGoodsCostings = (c: GoodsCosting[]) => { setGoodsCostings(c); persistData('goods_costings', c); notify("Yield Profile Synced", "success"); };
+    const handleUpdateGoodsReceivings = (r: GoodsReceiving[]) => { setGoodsReceivings(r); persistData('goods_receivings', r); notify("Logistics Record Locked", "success"); };
+    const handleUpdateWeeklyChecks = (w: WeeklyInventoryCheck[]) => { setWeeklyChecks(w); persistData('weekly_checks', w); notify("Audit Confirmed", "success"); };
+    const handleUpdateNotifications = (n: AppNotification[]) => { setNotifications(n); persistData('notifications', n); };
+    const handleUpdateAnomalyAlerts = (a: AnomalyAlert[]) => { setAnomalyAlerts(a); persistData('anomaly_alerts', a); };
+
+    // AUTH LIFE CYCLE
+    useEffect(() => {
+        const init = async () => {
+            if (!isSupabaseConfigured) { setIsInitialized(true); return; }
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                processSessionUser(session.user);
+                const bid = localStorage.getItem('fintab_active_business_id');
+                if (bid) await fetchAllBusinessData(bid);
+            }
+            setIsInitialized(true);
+        };
+        init();
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === 'SIGNED_IN' && session?.user) {
+                processSessionUser(session.user);
+                const bid = localStorage.getItem('fintab_active_business_id');
+                if (bid) await fetchAllBusinessData(bid);
+            } else if (event === 'SIGNED_OUT') { handleLogout(true); }
+        });
         return () => subscription.unsubscribe();
     }, []);
 
-    useEffect(() => {
-        if (activeBusinessId) {
-            const bizPrefix = `fintab_${activeBusinessId}`;
-            setBusinessProfile(getStoredItem(`${bizPrefix}_profile`, null));
-            setBusinessSettings(getStoredItem(`${bizPrefix}_settings`, DEFAULT_BUSINESS_SETTINGS));
-            setReceiptSettings(getStoredItem(`${bizPrefix}_receipt_settings`, DEFAULT_RECEIPT_SETTINGS));
-            setOwnerSettings(getStoredItem(`${bizPrefix}_owner_settings`, DEFAULT_OWNER_SETTINGS));
-            setPermissions(getStoredItem(`${bizPrefix}_permissions`, DEFAULT_PERMISSIONS));
-            setPrinterSettings(getStoredItem(`${bizPrefix}_printer_settings`, { autoPrint: false }));
-            setProducts(getStoredItem(`${bizPrefix}_products`, DUMMY_PRODUCTS));
-            setSales(getStoredItem(`${bizPrefix}_sales`, []));
-            setCustomers(getStoredItem(`${bizPrefix}_customers`, []));
-            setUsers(getStoredItem(`${bizPrefix}_users`, []));
-            setExpenses(getStoredItem(`${bizPrefix}_expenses`, []));
-            setExpenseRequests(getStoredItem(`${bizPrefix}_expense_requests`, []));
-            setDeposits(getStoredItem(`${bizPrefix}_deposits`, []));
-            setAnomalyAlerts(getStoredItem(`${bizPrefix}_anomaly_alerts`, []));
-            setCashCounts(getStoredItem(`${bizPrefix}_cash_counts`, []));
-            setGoodsCostings(getStoredItem(`${bizPrefix}_goods_costings`, []));
-            setGoodsReceivings(getStoredItem(`${bizPrefix}_goods_receivings`, []));
-            setWeeklyChecks(getStoredItem(`${bizPrefix}_weekly_checks`, []));
-            setBankAccounts(getStoredItem(`${bizPrefix}_bank_accounts`, []));
-            setBankTransactions(getStoredItem(`${bizPrefix}_bank_transactions`, []));
-            setNotifications(getStoredItem(`${bizPrefix}_notifications`, []));
-            setCart(getStoredItem(`${bizPrefix}_cart`, []));
-        }
-    }, [activeBusinessId]);
+    const processSessionUser = (sbUser: any) => {
+        const userObj: User = {
+            id: sbUser.id,
+            name: sbUser.user_metadata?.full_name || sbUser.email?.split('@')[0] || 'User',
+            email: sbUser.email!,
+            avatarUrl: sbUser.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(sbUser.email!)}`,
+            role: 'Owner',
+            status: 'Active'
+        };
+        setCurrentUser(userObj);
+        setStoredItemAndDispatchEvent('fintab_simulator_session', userObj);
+    };
 
-    // FIX: Optimized and robust translation logic to support flat keys
+    const handleLogout = async (skipSupabase = false) => {
+        if (!skipSupabase && isSupabaseConfigured) await supabase.auth.signOut();
+        localStorage.removeItem('fintab_simulator_session');
+        localStorage.removeItem('fintab_active_business_id');
+        window.location.href = window.location.origin + window.location.pathname + '#/login';
+        window.location.reload();
+    };
+
+    const handleSelectBusiness = async (id: string) => {
+        setActiveBusinessId(id);
+        localStorage.setItem('fintab_active_business_id', id);
+        await fetchAllBusinessData(id);
+        notify("Protocol Authorized", "success");
+        navigate('/dashboard');
+    };
+
     const t = useCallback((key: string) => {
         if (!key) return '';
         const dict = translations[language] || translations['en'];
-        // Try exact match, then case-insensitive match, then fallback to English
-        const found = dict[key] || dict[key.toLowerCase()] || translations['en'][key] || translations['en'][key.toLowerCase()];
-        return found || key;
+        return dict[key] || translations['en'][key] || key;
     }, [language]);
 
     useEffect(() => {
         if (theme === 'dark') document.documentElement.classList.add('dark');
         else document.documentElement.classList.remove('dark');
-        localStorage.setItem('fintab_theme', theme);
-    }, [theme]);
-
-    const handleLogout = () => {
-        if (isSupabaseConfigured) supabase.auth.signOut();
-        setCurrentUser(null);
-        setActiveBusinessId(null);
-        localStorage.removeItem('fintab_simulator_session');
-        localStorage.removeItem('fintab_active_business_id');
-        navigate('/login');
-    };
-
-    const handleSelectBusiness = (id: string) => {
-        setActiveBusinessId(id);
-        localStorage.setItem('fintab_active_business_id', id);
-        navigate('/dashboard');
-    };
-
-    const handleEnterDemo = () => {
-        const demoUser = {
-            id: 'u-demo',
-            name: 'Demo Admin',
-            email: 'demo@fintab.io',
-            role: 'Owner',
-            avatarUrl: `https://ui-avatars.com/api/?name=Demo+Admin&background=2563EB&color=fff`,
-            type: 'commission',
-            initialInvestment: 50000
-        };
-        
-        // Setup Registry
-        const registry = getStoredItem<AdminBusinessData[]>('fintab_businesses_registry', []);
-        if (!registry.find(b => b.id === 'biz-demo')) {
-            registry.push({
-                id: 'biz-demo',
-                profile: { businessName: 'FinTab Demo Node', businessType: 'Retail', logo: FINTAB_LOGO_SVG },
-                licensingInfo: { licenseType: 'Trial', enrollmentDate: new Date().toISOString(), trialEndDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() },
-                owner: { name: 'Demo Admin', email: 'demo@fintab.io' },
-                stats: { totalRevenue: 12500, salesCount: 45, userCount: 3, joinedDate: new Date().toISOString(), status: 'Active' }
-            });
-            localStorage.setItem('fintab_businesses_registry', JSON.stringify(registry));
-        }
-
-        const bizUsersKey = `fintab_biz-demo_users`;
-        const existingUsers = getStoredItem(bizUsersKey, []);
-        if (existingUsers.length === 0) {
-            localStorage.setItem(bizUsersKey, JSON.stringify([demoUser]));
-        }
-
-        setStoredItemAndDispatchEvent('fintab_simulator_session', demoUser);
-        setCurrentUser(demoUser);
-        handleSelectBusiness('biz-demo');
-    };
-
-    const persistData = (key: string, data: any) => {
-        if (activeBusinessId) {
-            setStoredItemAndDispatchEvent(`fintab_${activeBusinessId}_${key}`, data);
-        }
-    };
+        if (activeBusinessId) persistData('theme', theme);
+    }, [theme, activeBusinessId]);
 
     const handleUpdateCartItem = (product: Product, variant: ProductVariant | undefined, quantity: number) => {
         let newCart = [...cart];
         const existingIdx = newCart.findIndex(item => item.product.id === product.id && item.variant?.id === variant?.id);
-        
-        if (quantity <= 0) {
-            if (existingIdx > -1) newCart.splice(existingIdx, 1);
-        } else {
-            if (existingIdx > -1) {
-                newCart[existingIdx].quantity = quantity;
-            } else {
-                newCart.push({ product, variant, quantity, stock: variant ? variant.stock : product.stock });
-            }
+        if (quantity <= 0) { if (existingIdx > -1) newCart.splice(existingIdx, 1); }
+        else {
+            if (existingIdx > -1) newCart[existingIdx].quantity = quantity;
+            else newCart.push({ product, variant, quantity, stock: variant ? variant.stock : product.stock });
         }
         setCart(newCart);
-        persistData('cart', newCart);
-    };
-
-    const handleProcessSale = (sale: Sale) => {
-        const updatedSales = [sale, ...sales];
-        setSales(updatedSales);
-        persistData('sales', updatedSales);
-        
-        if (sale.status === 'completed' || sale.status === 'completed_bank_verified') {
-            const updatedProducts = products.map(p => {
-                const cartItem = sale.items.find(i => i.product.id === p.id);
-                if (cartItem) return { ...p, stock: p.stock - cartItem.quantity };
-                return p;
-            });
-            setProducts(updatedProducts);
-            persistData('products', updatedProducts);
-        }
     };
 
     if (!isInitialized) return <SplashScreen onComplete={() => setIsInitialized(true)} />;
 
-    if (!currentUser) return <Login onEnterDemo={handleEnterDemo} />;
-
-    if (!activeBusinessId) return <SelectBusiness currentUser={currentUser} onSelect={handleSelectBusiness} onLogout={handleLogout} />;
-
     return (
         <div className="flex h-screen bg-slate-50 dark:bg-gray-950 overflow-hidden font-sans">
             <ScrollToTop />
-            <Sidebar 
-                t={t} 
-                isOpen={isSidebarOpen} 
-                setIsOpen={setIsSidebarOpen} 
-                cart={cart} 
-                currentUser={currentUser} 
-                onLogout={handleLogout}
-                permissions={permissions}
-                businessProfile={businessProfile}
-                ownerSettings={ownerSettings}
-                systemLogo={systemLogo}
-                isSafeMode={false}
-            />
+            {currentUser && activeBusinessId && (
+                <Sidebar t={t} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} cart={cart} currentUser={currentUser} onLogout={() => handleLogout()} permissions={permissions} businessProfile={businessProfile} ownerSettings={ownerSettings} systemLogo={systemLogo} isSafeMode={false} />
+            )}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-                <Header 
-                    currentUser={currentUser}
-                    businessProfile={businessProfile}
-                    systemLogo={systemLogo}
-                    onMenuClick={() => setIsSidebarOpen(true)}
-                    notifications={notifications}
-                    cartCount={cart.reduce((s, i) => s + i.quantity, 0)}
-                    onMarkAsRead={(id) => {
-                        const updated = notifications.map(n => n.id === id ? { ...n, isRead: true } : n);
-                        setNotifications(updated);
-                        persistData('notifications', updated);
-                    }}
-                    onMarkAllAsRead={() => {
-                        const updated = notifications.map(n => ({ ...n, isRead: true }));
-                        setNotifications(updated);
-                        persistData('notifications', updated);
-                    }}
-                    onClear={(id) => {
-                        const updated = notifications.filter(n => n.id !== id);
-                        setNotifications(updated);
-                        persistData('notifications', updated);
-                    }}
-                />
-                <main id="app-main-viewport" className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8 pb-32">
+                {currentUser && activeBusinessId && (
+                    <Header currentUser={currentUser} businessProfile={businessProfile} systemLogo={systemLogo} onMenuClick={() => setIsSidebarOpen(true)} notifications={notifications} cartCount={cart.reduce((s, i) => s + i.quantity, 0)} onMarkAsRead={(id) => { const updated = notifications.map(n => n.id === id ? { ...n, isRead: true } : n); handleUpdateNotifications(updated); }} onMarkAllAsRead={() => { const updated = notifications.map(n => ({ ...n, isRead: true })); handleUpdateNotifications(updated); }} onClear={(id) => { const updated = notifications.filter(n => n.id !== id); handleUpdateNotifications(updated); }} />
+                )}
+                <main id="app-main-viewport" className={`flex-1 overflow-y-auto custom-scrollbar ${currentUser && activeBusinessId ? 'p-4 md:p-8 pb-32' : ''}`}>
                     <Routes>
-                        <Route path="/dashboard" element={<Dashboard {...{ products, customers, users, sales, expenses, deposits, expenseRequests, anomalyAlerts, currentUser, businessProfile, businessSettings, ownerSettings, receiptSettings, permissions, t, lowStockThreshold: 10, isSafeMode: false }} />} />
-                        <Route path="/assistant" element={<AIAssistant {...{ currentUser, sales, products, expenses, customers, users, expenseRequests, cashCounts, goodsCosting: goodsCostings, goodsReceiving: goodsReceivings, anomalyAlerts, businessSettings, lowStockThreshold: 10, t, receiptSettings, permissions }} />} />
-                        <Route path="/inventory" element={<Inventory {...{ products, setProducts: (p) => { setProducts(p); persistData('products', p); }, t, receiptSettings, currentUser, users, handleSaveProduct: (p, edit) => {
-                            const updated = edit ? products.map(old => old.id === p.id ? p : old) : [p, ...products];
-                            setProducts(updated);
-                            persistData('products', updated);
-                        }, onSaveStockAdjustment: (id, adj) => {
-                             const updated = products.map(p => {
-                                if (p.id === id) {
-                                    const ns = adj.type === 'add' ? p.stock + adj.quantity : p.stock - adj.quantity;
-                                    return { ...p, stock: ns, stockHistory: [{ date: new Date().toISOString(), userId: currentUser.id, ...adj, newStockLevel: ns }, ...(p.stockHistory || [])] };
-                                }
-                                return p;
-                             });
-                             setProducts(updated);
-                             persistData('products', updated);
-                        } }} />} />
-                        <Route path="/customers" element={<Customers {...{ customers, setCustomers: (c) => { setCustomers(c); persistData('customers', c); }, t, receiptSettings }} />} />
-                        <Route path="/users" element={<Users {...{ users, sales, customers, t, currentUser, receiptSettings, permissions, ownerSettings, businessProfile, onSaveUser: (u, edit, id) => {
-                            const updated = edit ? users.map(old => old.id === id ? { ...old, ...u } : old) : [{ ...u, id: `u-${Date.now()}`, avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}` }, ...users];
-                            setUsers(updated);
-                            persistData('users', updated);
-                        }, onDeleteUser: (id) => {
-                            const updated = users.filter(u => u.id !== id);
-                            setUsers(updated);
-                            persistData('users', updated);
-                        }, handleInitiateCustomPayment: (target, amt, desc) => {
-                            const payment = { id: `cp-${Date.now()}`, dateInitiated: new Date().toISOString(), amount: amt, description: desc, status: 'pending_owner_approval', initiatedBy: currentUser.name, auditLog: [] };
-                            const updated = users.map(u => u.id === target ? { ...u, customPayments: [payment, ...(u.customPayments || [])] } : u);
-                            setUsers(updated);
-                            persistData('users', updated);
-                        } }} />} />
-                        <Route path="/receipts" element={<Receipts {...{ sales, customers, users, t, receiptSettings, currentUser, isTrialExpired: false, printerSettings, onDeleteSale: (id) => {
-                            const updated = sales.filter(s => s.id !== id);
-                            setSales(updated);
-                            persistData('sales', updated);
-                        } }} />} />
-                        <Route path="/proforma" element={<Proforma {...{ sales, customers, users, t, receiptSettings, currentUser, isTrialExpired: false, printerSettings, onDeleteSale: (id) => {
-                            const updated = sales.filter(s => s.id !== id);
-                            setSales(updated);
-                            persistData('sales', updated);
-                        } }} />} />
-                        <Route path="/items" element={<Items {...{ products, cart, t, receiptSettings, onUpdateCartItem: handleUpdateCartItem }} />} />
-                        <Route path="/counter" element={<Counter {...{ cart, customers, users, onUpdateCartItem: handleUpdateCartItem, onProcessSale: handleProcessSale, onClearCart: () => { setCart([]); persistData('cart', []); }, receiptSettings, t, currentUser, businessSettings, printerSettings, isTrialExpired: false, permissions, bankAccounts, onAddCustomer: (c) => {
-                            const nc = { ...c, id: `c-${Date.now()}`, joinDate: new Date().toISOString(), purchaseHistory: [] };
-                            const updated = [nc, ...customers];
-                            setCustomers(updated);
-                            persistData('customers', updated);
-                            return nc;
-                        } }} />} />
-                        <Route path="/commission" element={<Commission {...{ products, setProducts: (p) => { setProducts(p); persistData('products', p); }, t, receiptSettings }} />} />
-                        <Route path="/expenses" element={<Expenses {...{ expenses, setExpenses: (e) => { setExpenses(e); persistData('expenses', e); }, t, receiptSettings }} />} />
-                        <Route path="/expense-requests" element={<ExpenseRequestPage {...{ expenseRequests, expenses, currentUser, t, receiptSettings, handleRequestExpense: (r) => {
-                            const nr = { ...r, id: `er-${Date.now()}`, date: new Date().toISOString(), userId: currentUser.id, status: 'pending' };
-                            const updated = [nr, ...expenseRequests];
-                            setExpenseRequests(updated);
-                            persistData('expense_requests', updated);
-                        } }} />} />
-                        <Route path="/profile" element={<MyProfile {...{ currentUser, users, sales, expenses, customers, products, receiptSettings, t, onRequestWithdrawal: (uid, amt, src) => {
-                            const w = { id: `wd-${Date.now()}`, date: new Date().toISOString(), amount: amt, status: 'pending', source: src, auditLog: [] };
-                            const updated = users.map(u => u.id === uid ? { ...u, withdrawals: [w, ...(u.withdrawals || [])] } : u);
-                            setUsers(updated);
-                            persistData('users', updated);
-                            if (uid === currentUser.id) setCurrentUser({ ...currentUser, withdrawals: [w, ...(currentUser.withdrawals || [])] });
-                        }, onUpdateWithdrawalStatus: (uid, wid, st) => {
-                            const updated = users.map(u => u.id === uid ? { ...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? { ...w, status: st } : w) } : u);
-                            setUsers(updated);
-                            persistData('users', updated);
-                        }, onConfirmWithdrawalReceived: (uid, wid) => {
-                            const updated = users.map(u => u.id === uid ? { ...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? { ...w, status: 'completed' } : w) } : u);
-                            setUsers(updated);
-                            persistData('users', updated);
-                        }, handleUpdateCustomPaymentStatus: (uid, pid, st) => {
-                            const updated = users.map(u => u.id === uid ? { ...u, customPayments: (u.customPayments || []).map(p => p.id === pid ? { ...p, status: st } : p) } : u);
-                            setUsers(updated);
-                            persistData('users', updated);
-                        }, handleInitiateCustomPayment: (target, amt, desc) => {
-                            const p = { id: `cp-${Date.now()}`, dateInitiated: new Date().toISOString(), amount: amt, description: desc, status: 'pending_owner_approval', initiatedBy: currentUser.name, auditLog: [] };
-                            const updated = users.map(u => u.id === target ? { ...u, customPayments: [p, ...(u.customPayments || [])] } : u);
-                            setUsers(updated);
-                            persistData('users', updated);
-                        }, onSwitchUser: (u) => { setCurrentUser(u); setStoredItemAndDispatchEvent('fintab_simulator_session', u); }, onUpdateCurrentUserProfile: (p) => { const next = { ...currentUser, ...p }; setCurrentUser(next); const updated = users.map(u => u.id === currentUser.id ? next : u); setUsers(updated); persistData('users', updated); setStoredItemAndDispatchEvent('fintab_simulator_session', next); }, businessProfile, ownerSettings, businessSettings, companyValuations: [] }} />} />
-                        <Route path="/settings" element={<Settings {...{ language, setLanguage: (l) => { setLanguage(l); localStorage.setItem('fintab_lang', l); }, t, currentUser, receiptSettings, setReceiptSettings: (s) => { setReceiptSettings(s); persistData('receipt_settings', s); }, theme, setTheme }} />} />
-                        <Route path="/settings/receipts" element={<ReceiptSettings settings={receiptSettings} setSettings={(s) => { setReceiptSettings(s); persistData('receipt_settings', s); }} t={t} />} />
-                        <Route path="/settings/permissions" element={<Permissions permissions={permissions} onUpdatePermissions={(p) => { setPermissions(p); persistData('permissions', p); }} t={t} users={users} />} />
-                        <Route path="/settings/business" element={<BusinessSettings settings={businessSettings} onUpdateSettings={(s) => { setBusinessSettings(s); persistData('settings', s); }} businessProfile={businessProfile} onUpdateBusinessProfile={(p) => { setBusinessProfile(p); persistData('profile', p); }} onResetBusiness={() => { localStorage.clear(); window.location.reload(); }} t={t} currentUser={currentUser} onUpdateCurrentUserProfile={(p) => { const next = { ...currentUser, ...p }; setCurrentUser(next); persistData('users', users.map(u => u.id === currentUser.id ? next : u)); setStoredItemAndDispatchEvent('fintab_simulator_session', next); }} users={users} />} />
-                        <Route path="/settings/owner" element={<OwnerSettingsPage ownerSettings={ownerSettings} onUpdate={(s) => { setOwnerSettings(s); persistData('owner_settings', s); }} t={t} />} />
-                        <Route path="/settings/printer" element={<PrinterSettings settings={printerSettings} onUpdateSettings={(s) => { setPrinterSettings(s); persistData('printer_settings', s); }} />} />
-                        <Route path="/cash-count" element={<CashCountPage {...{ cashCounts, setCashCounts: (c) => { setCashCounts(c); persistData('cash_counts', c); }, users, sales, currentUser, receiptSettings, permissions, businessSettings, businessProfile, createNotification: (target, title, msg, type, link) => {
-                            const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link };
-                            const updated = [n, ...notifications];
-                            setNotifications(updated);
-                            persistData('notifications', updated);
-                        } }} />} />
-                        <Route path="/bank-accounts" element={<BankAccountsPage {...{ bankAccounts, setBankAccounts: (b) => { setBankAccounts(b); persistData('bank_accounts', b); }, bankTransactions, setBankTransactions: (t) => { setBankTransactions(t); persistData('bank_transactions', t); }, receiptSettings, currentUser, users }} />} />
-                        <Route path="/goods-costing" element={<GoodsCostingPage {...{ goodsCostings, setGoodsCostings: (c) => { setGoodsCostings(c); persistData('goods_costings', c); }, products, setProducts: (p) => { setProducts(p); persistData('products', p); }, users, currentUser, receiptSettings, permissions, businessSettings, businessProfile, createNotification: (target, title, msg, type, link) => {
-                             const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link };
-                             const updated = [n, ...notifications];
-                             setNotifications(updated);
-                             persistData('notifications', updated);
-                        } }} />} />
-                        <Route path="/goods-receiving" element={<GoodsReceivingPage {...{ goodsReceivings, setGoodsReceivings: (r) => { setGoodsReceivings(r); persistData('goods_receivings', r); }, products, setProducts: (p) => { setProducts(p); persistData('products', p); }, users, currentUser, receiptSettings, permissions, businessSettings, businessProfile, createNotification: (target, title, msg, type, link) => {
-                             const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link };
-                             const updated = [n, ...notifications];
-                             setNotifications(updated);
-                             persistData('notifications', updated);
-                        } }} />} />
-                        <Route path="/weekly-inventory-check" element={<WeeklyInventoryCheckPage {...{ weeklyChecks, setWeeklyChecks: (c) => { setWeeklyChecks(c); persistData('weekly_checks', c); }, products, users, currentUser, receiptSettings, businessSettings, businessProfile, permissions, createNotification: (target, title, msg, type, link) => {
-                             const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link };
-                             const updated = [n, ...notifications];
-                             setNotifications(updated);
-                             persistData('notifications', updated);
-                        } }} />} />
+                        <Route path="/join/:token" element={<JoinBusiness />} />
+                        <Route path="/login" element={!currentUser ? <Login language={language} setLanguage={setLanguage} t={t} /> : <Navigate to={activeBusinessId ? "/dashboard" : "/select-business"} replace />} />
+                        <Route path="/select-business" element={currentUser ? <SelectBusiness currentUser={currentUser} onSelect={handleSelectBusiness} onLogout={() => handleLogout()} /> : <Navigate to="/login" />} />
+                        
+                        <Route path="/dashboard" element={currentUser && activeBusinessId ? <Dashboard {...{ products, customers, users, sales, expenses, deposits, expenseRequests, anomalyAlerts, currentUser, businessProfile, businessSettings, ownerSettings, receiptSettings, permissions, t, lowStockThreshold: 10, isSafeMode: false, onApproveClientOrder: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'completed'} : x); handleUpdateSales(s); }, onRejectClientOrder: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'rejected'} : x); handleUpdateSales(s); }, onUpdateWithdrawalStatus: (uid, wid, st) => { const updated = users.map(u => u.id === uid ? {...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? {...w, status: st} : w)} : u); handleUpdateUsers(updated); }, handleUpdateCustomPaymentStatus: (uid, pid, st) => { const updated = users.map(u => u.id === uid ? {...u, customPayments: (u.customPayments || []).map(p => p.id === pid ? {...p, status: st} : p)} : u); handleUpdateUsers(updated); }, onUpdateExpenseRequestStatus: (rid, st) => { const updated = expenseRequests.map(r => r.id === rid ? {...r, status: st} : r); handleUpdateExpenseRequests(updated); }, onUpdateDepositStatus: (did, st) => { const updated = deposits.map(d => d.id === did ? {...d, status: st} : d); handleUpdateDeposits(updated); }, onApproveBankSale: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'completed'} : x); handleUpdateSales(s); }, onRejectBankSale: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'rejected'} : x); handleUpdateSales(s); }, onDismissAnomaly: (id, reason) => { const a = anomalyAlerts.map(x => x.id === id ? {...x, isDismissed: true, dismissalReason: reason} : x); handleUpdateAnomalyAlerts(a); }, onMarkAnomalyRead: (id) => { const a = anomalyAlerts.map(x => x.id === id ? {...x, isRead: true} : x); handleUpdateAnomalyAlerts(a); } }} /> : <Navigate to={currentUser ? "/select-business" : "/login"} replace />} />
+                        <Route path="/assistant" element={currentUser && activeBusinessId ? <AIAssistant {...{ currentUser, sales, products, expenses, customers, users, expenseRequests, cashCounts, goodsCosting: goodsCostings, goodsReceiving: goodsReceivings, anomalyAlerts, businessSettings, lowStockThreshold: 10, t, receiptSettings, permissions }} /> : <Navigate to="/login" />} />
+                        <Route path="/inventory" element={currentUser && activeBusinessId ? <Inventory {...{ products, setProducts: handleUpdateProducts, t, receiptSettings, currentUser, users, handleSaveProduct: (p, edit) => { const updated = edit ? products.map(old => old.id === p.id ? p : old) : [p, ...products]; handleUpdateProducts(updated); }, onSaveStockAdjustment: (id, adj) => { const updated = products.map(p => { if (p.id === id) { const ns = adj.type === 'add' ? p.stock + adj.quantity : p.stock - adj.quantity; return { ...p, stock: ns, stockHistory: [{ date: new Date().toISOString(), userId: currentUser.id, ...adj, newStockLevel: ns }, ...(p.stockHistory || [])] }; } return p; }); handleUpdateProducts(updated); } }} /> : <Navigate to="/login" />} />
+                        <Route path="/customers" element={currentUser && activeBusinessId ? <Customers {...{ customers, setCustomers: handleUpdateCustomers, t, receiptSettings }} /> : <Navigate to="/login" />} />
+                        <Route path="/users" element={currentUser && activeBusinessId ? <Users {...{ users, sales, customers, t, currentUser, receiptSettings, permissions, ownerSettings, businessProfile, onSaveUser: (u, edit, id) => { const updated = edit ? users.map(old => old.id === id ? { ...old, ...u } : old) : [{ ...u, id: `u-${Date.now()}`, avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}` }, ...users]; handleUpdateUsers(updated); }, onDeleteUser: (id) => { const updated = users.filter(u => u.id !== id); handleUpdateUsers(updated); }, handleInitiateCustomPayment: (target, amt, desc) => { const p = { id: `cp-${Date.now()}`, dateInitiated: new Date().toISOString(), amount: amt, description: desc, status: 'pending_owner_approval', initiatedBy: currentUser.name, auditLog: [] }; const updated = users.map(u => u.id === target ? { ...u, customPayments: [p, ...(u.customPayments || [])] } : u); handleUpdateUsers(updated); } }} /> : <Navigate to="/login" />} />
+                        <Route path="/receipts" element={currentUser && activeBusinessId ? <Receipts {...{ sales, customers, users, t, receiptSettings, currentUser, isTrialExpired: false, printerSettings, onDeleteSale: (id) => { const updated = sales.filter(s => s.id !== id); handleUpdateSales(updated); } }} /> : <Navigate to="/login" />} />
+                        <Route path="/proforma" element={currentUser && activeBusinessId ? <Proforma {...{ sales, customers, users, t, receiptSettings, currentUser, isTrialExpired: false, printerSettings, onDeleteSale: (id) => { const updated = sales.filter(s => s.id !== id); handleUpdateSales(updated); } }} /> : <Navigate to="/login" />} />
+                        <Route path="/items" element={currentUser && activeBusinessId ? <Items {...{ products, cart, t, receiptSettings, onUpdateCartItem: handleUpdateCartItem }} /> : <Navigate to="/login" />} />
+                        <Route path="/counter" element={currentUser && activeBusinessId ? <Counter {...{ cart, customers, users, onUpdateCartItem: handleUpdateCartItem, onProcessSale: (sale) => { const s = [sale, ...sales]; handleUpdateSales(s); if(sale.status === 'completed') { const p = products.map(x => { const item = sale.items.find(i => i.product.id === x.id); return item ? {...x, stock: x.stock - item.quantity} : x; }); handleUpdateProducts(p); } }, onClearCart: () => setCart([]), receiptSettings, t, currentUser, businessSettings, printerSettings, isTrialExpired: false, permissions, bankAccounts, onAddCustomer: (c) => { const nc = { ...c, id: `c-${Date.now()}`, joinDate: new Date().toISOString(), purchaseHistory: [] }; handleUpdateCustomers([nc, ...customers]); return nc; } }} /> : <Navigate to="/login" />} />
+                        <Route path="/expenses" element={currentUser && activeBusinessId ? <Expenses {...{ expenses, setExpenses: handleUpdateExpenses, t, receiptSettings }} /> : <Navigate to="/login" />} />
+                        <Route path="/expense-requests" element={currentUser && activeBusinessId ? <ExpenseRequestPage {...{ expenseRequests, expenses, currentUser, handleRequestExpense: (r) => handleUpdateExpenseRequests([{...r, id: `req-${Date.now()}`, date: new Date().toISOString(), userId: currentUser.id, status: 'pending'}, ...expenseRequests]), receiptSettings, t }} /> : <Navigate to="/login" />} />
+                        <Route path="/profile" element={currentUser && activeBusinessId ? <MyProfile {...{ currentUser, users, sales, expenses, customers, products, receiptSettings, t, onRequestWithdrawal: (uid, amt, src) => { const w = { id: `wd-${Date.now()}`, date: new Date().toISOString(), amount: amt, status: 'pending', source: src, auditLog: [] }; const updated = users.map(u => u.id === uid ? { ...u, withdrawals: [w, ...(u.withdrawals || [])] } : u); handleUpdateUsers(updated); }, handleUpdateCustomPaymentStatus: (uid, pid, st) => { const updated = users.map(u => u.id === uid ? {...u, customPayments: (u.customPayments || []).map(p => p.id === pid ? {...p, status: st} : p)} : u); handleUpdateUsers(updated); }, handleInitiateCustomPayment: (target, amt, desc) => { const p = { id: `cp-${Date.now()}`, dateInitiated: new Date().toISOString(), amount: amt, description: desc, status: 'pending_owner_approval', initiatedBy: currentUser.name, auditLog: [] }; const updated = users.map(u => u.id === target ? { ...u, customPayments: [p, ...(u.customPayments || [])] } : u); handleUpdateUsers(updated); }, onUpdateWithdrawalStatus: (uid, wid, st) => { const updated = users.map(u => u.id === uid ? {...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? {...w, status: st} : w)} : u); handleUpdateUsers(updated); }, onConfirmWithdrawalReceived: (uid, wid) => { const updated = users.map(u => u.id === uid ? {...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? {...w, status: 'completed'} : w)} : u); handleUpdateUsers(updated); }, onSwitchUser: (u) => { setCurrentUser(u); setStoredItemAndDispatchEvent('fintab_simulator_session', u); window.location.reload(); }, onUpdateCurrentUserProfile: (p) => { const next = { ...currentUser, ...p }; setCurrentUser(next); const updated = users.map(u => u.id === currentUser.id ? next : u); handleUpdateUsers(updated); setStoredItemAndDispatchEvent('fintab_simulator_session', next); }, businessProfile, ownerSettings, businessSettings, companyValuations: [] }} /> : <Navigate to="/login" />} />
+                        <Route path="/cash-count" element={currentUser && activeBusinessId ? <CashCountPage {...{ cashCounts, setCashCounts: handleUpdateCashCounts, users, sales, currentUser, receiptSettings, permissions, businessSettings, businessProfile, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} /> : <Navigate to="/login" />} />
+                        <Route path="/bank-accounts" element={currentUser && activeBusinessId ? <BankAccountsPage {...{ bankAccounts, setBankAccounts: handleUpdateBankAccounts, bankTransactions, setBankTransactions: handleUpdateBankTransactions, receiptSettings, currentUser, users }} /> : <Navigate to="/login" />} />
+                        <Route path="/goods-costing" element={currentUser && activeBusinessId ? <GoodsCostingPage {...{ goodsCostings, setGoodsCostings: handleUpdateGoodsCostings, products, setProducts: handleUpdateProducts, users, currentUser, receiptSettings, businessSettings, businessProfile, permissions, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} /> : <Navigate to="/login" />} />
+                        <Route path="/goods-receiving" element={currentUser && activeBusinessId ? <GoodsReceivingPage {...{ goodsReceivings, setGoodsReceivings: handleUpdateGoodsReceivings, products, setProducts: handleUpdateProducts, users, currentUser, receiptSettings, businessSettings, businessProfile, permissions, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} /> : <Navigate to="/login" />} />
+                        <Route path="/weekly-inventory-check" element={currentUser && activeBusinessId ? <WeeklyInventoryCheckPage {...{ weeklyChecks, setWeeklyChecks: handleUpdateWeeklyChecks, products, users, currentUser, receiptSettings, businessSettings, businessProfile, permissions, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} /> : <Navigate to="/login" />} />
+                        <Route path="/alerts" element={currentUser && activeBusinessId ? <AlertsPage {...{ anomalyAlerts, onDismiss: (id, r) => handleUpdateAnomalyAlerts(anomalyAlerts.map(a => a.id === id ? {...a, isDismissed: true, dismissalReason: r} : a)), onMarkRead: (id) => handleUpdateAnomalyAlerts(anomalyAlerts.map(a => a.id === id ? {...a, isRead: true} : a)), receiptSettings, currentUser }} /> : <Navigate to="/login" />} />
+                        <Route path="/settings" element={currentUser && activeBusinessId ? <Settings {...{ language, setLanguage: (l) => { setLanguage(l); localStorage.setItem(`fintab_${activeBusinessId}_lang`, l); persistData('lang', l); }, t, currentUser, receiptSettings, setReceiptSettings: (s) => { setReceiptSettings(s); persistData('receipt_settings', s); notify("Protocol Updated", "success"); }, theme, setTheme: (th) => { setTheme(th); localStorage.setItem(`fintab_${activeBusinessId}_theme`, th); persistData('theme', th); } }} /> : <Navigate to="/login" />} />
+                        <Route path="/settings/receipts" element={currentUser && activeBusinessId ? <ReceiptSettings settings={receiptSettings} setSettings={(s) => { setReceiptSettings(s); persistData('receipt_settings', s); notify("Visual Identity Synced", "success"); }} t={t} /> : <Navigate to="/login" />} />
+                        <Route path="/settings/permissions" element={currentUser && activeBusinessId ? <Permissions permissions={permissions} onUpdatePermissions={(p) => { setPermissions(p); persistData('permissions', p); notify("Access Matrix Authorized", "success"); }} t={t} users={users} /> : <Navigate to="/login" />} />
+                        <Route path="/settings/business" element={currentUser && activeBusinessId ? <BusinessSettings settings={businessSettings} onUpdateSettings={(s) => { setBusinessSettings(s); persistData('settings', s); notify("Core Logic Synced", "success"); }} businessProfile={businessProfile} onUpdateBusinessProfile={(p) => { setBusinessProfile(p); persistData('profile', p); notify("Profile Updated", "success"); }} onResetBusiness={() => { if(confirm("Terminate local node?")) { localStorage.clear(); window.location.reload(); } }} t={t} currentUser={currentUser} users={users} onUpdateCurrentUserProfile={(p) => { const next = { ...currentUser, ...p }; setCurrentUser(next); const updated = users.map(u => u.id === currentUser.id ? next : u); handleUpdateUsers(updated); setStoredItemAndDispatchEvent('fintab_simulator_session', next); }} /> : <Navigate to="/login" />} />
+                        <Route path="/settings/owner" element={currentUser && activeBusinessId ? <OwnerSettingsPage ownerSettings={ownerSettings} onUpdate={(s) => { setOwnerSettings(s); persistData('owner_settings', s); notify("Override Protocol Applied", "success"); }} t={t} /> : <Navigate to="/login" />} />
+                        <Route path="/settings/printer" element={currentUser && activeBusinessId ? <PrinterSettings settings={printerSettings} onUpdateSettings={(s) => { setPrinterSettings(s); persistData('printer_settings', s); notify("Hardware Logic Synced", "success"); }} /> : <Navigate to="/login" />} />
+                        
                         <Route path="/directory" element={<Directory />} />
-                        <Route path="/alerts" element={<AlertsPage {...{ anomalyAlerts, onDismiss: (id, reason) => {
-                            const updated = anomalyAlerts.map(a => a.id === id ? { ...a, isDismissed: true, dismissalReason: reason } : a);
-                            setAnomalyAlerts(updated);
-                            persistData('anomaly_alerts', updated);
-                        }, onMarkRead: (id) => {
-                            const updated = anomalyAlerts.map(a => a.id === id ? { ...a, isRead: true } : a);
-                            setAnomalyAlerts(updated);
-                            persistData('anomaly_alerts', updated);
-                        }, receiptSettings, currentUser }} />} />
                         <Route path="/public-shopfront/:businessId" element={<PublicStorefront />} />
-                        <Route path="/today" element={<Today {...{ sales, customers, expenses, products, t, receiptSettings }} />} />
-                        <Route path="/reports" element={<Reports {...{ sales, products, expenses, customers, users, t, lowStockThreshold: 10, setLowStockThreshold: () => {}, receiptSettings, currentUser, permissions, ownerSettings }} />} />
-                        <Route path="/transactions" element={<Transactions {...{ sales, deposits, bankAccounts, users, receiptSettings, currentUser, t, onRequestDeposit: (amt, desc, bid) => {
-                            const d = { id: `dep-${Date.now()}`, date: new Date().toISOString(), amount: amt, description: desc, userId: currentUser.id, status: 'pending', bankAccountId: bid };
-                            const updated = [d, ...deposits];
-                            setDeposits(updated);
-                            persistData('deposits', updated);
-                        } }} />} />
-                        <Route path="/investors" element={<InvestorPage {...{ users, sales, expenses, products, t, receiptSettings, currentUser, onSaveUser: (u, edit, id) => {
-                            const updated = edit ? users.map(old => old.id === id ? { ...old, ...u } : old) : [{ ...u, id: `u-${Date.now()}`, avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}` }, ...users];
-                            setUsers(updated);
-                            persistData('users', updated);
-                        }, onDeleteUser: (id) => {
-                            const updated = users.filter(u => u.id !== id);
-                            setUsers(updated);
-                            persistData('users', updated);
-                        }, businessSettings, businessProfile, permissions }} />} />
-                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                        <Route path="/today" element={currentUser && activeBusinessId ? <Today {...{ sales, customers, expenses, products, t, receiptSettings }} /> : <Navigate to="/login" />} />
+                        <Route path="/reports" element={currentUser && activeBusinessId ? <Reports {...{ sales, products, expenses, customers, users, t, receiptSettings, currentUser, permissions, ownerSettings }} /> : <Navigate to="/login" />} />
+                        <Route path="/transactions" element={currentUser && activeBusinessId ? <Transactions {...{ sales, deposits, bankAccounts, users, receiptSettings, currentUser, onRequestDeposit: (amt, desc, bid) => { const d = { id: `dep-${Date.now()}`, date: new Date().toISOString(), amount: amt, description: desc, userId: currentUser.id, status: 'pending', bankAccountId: bid }; handleUpdateDeposits([d, ...deposits]); }, t }} /> : <Navigate to="/login" />} />
+                        
+                        <Route path="/" element={<Navigate to={currentUser ? (activeBusinessId ? "/dashboard" : "/select-business") : "/login"} replace />} />
+                        <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                 </main>
             </div>

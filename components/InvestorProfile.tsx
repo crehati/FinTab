@@ -261,7 +261,7 @@ const InvestorProfile: React.FC<InvestorProfileProps> = ({
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-10">
                     <div className="flex flex-col md:flex-row items-center md:items-start gap-10 text-center md:text-left">
                         <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                            <img src={currentUser.avatarUrl} className="w-32 h-32 rounded-[3rem] object-cover border-4 border-white/10 shadow-2xl group-hover:opacity-75 transition-all" />
+                            <img src={currentUser.avatarUrl} className="w-24 h-24 sm:w-32 sm:h-32 rounded-[3rem] object-cover border-4 border-white/10 shadow-2xl group-hover:opacity-75 transition-all" />
                             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md rounded-[3rem]">
                                 <span className="bg-white text-slate-900 text-[9px] font-black uppercase px-6 py-2.5 rounded-xl">Update Node</span>
                             </div>
@@ -269,27 +269,27 @@ const InvestorProfile: React.FC<InvestorProfileProps> = ({
                         </div>
                         <div>
                             <div className="flex flex-col md:flex-row md:items-center gap-6">
-                                <h1 className="text-5xl md:text-6xl font-black uppercase tracking-tighter leading-none">{currentUser.name}</h1>
+                                <h1 className="text-4xl md:text-5xl lg:text-6xl font-black uppercase tracking-tighter leading-none">{currentUser.name}</h1>
                                 <span className="inline-block px-6 py-2 bg-white/10 backdrop-blur-md rounded-full text-[11px] font-black uppercase tracking-[0.4em] border border-white/10">Equity Partner</span>
                             </div>
                             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.4em] mt-8">Secure Node Authorization Active</p>
                         </div>
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                         <button onClick={() => setIsSwapModalOpen(true)} className="px-10 py-6 bg-white/10 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-[0.3em] hover:bg-white/20 transition-all active:scale-95 border border-white/10 backdrop-blur-md">
+                    <div className="flex flex-col sm:flex-row md:flex-col lg:flex-row gap-4 justify-center">
+                         <button onClick={() => setIsSwapModalOpen(true)} className="px-6 sm:px-10 md:px-6 lg:px-10 py-5 sm:py-6 bg-white/10 text-white rounded-[2rem] font-black uppercase text-[10px] sm:text-[11px] tracking-widest hover:bg-white/20 transition-all active:scale-95 border border-white/10 backdrop-blur-md whitespace-nowrap">
                             Swap Profile
                         </button>
                         {analytics.hasActiveRequest ? (
-                            <div className="px-12 py-6 bg-amber-500/10 border border-amber-500/20 rounded-[2rem] text-center">
+                            <div className="px-12 py-6 bg-amber-500/10 border border-amber-500/20 rounded-[2rem] text-center min-w-[200px]">
                                 <p className="text-amber-500 font-black uppercase text-[10px] tracking-[0.4em]">Audit Pending</p>
                             </div>
                         ) : (
                             <button 
                                 onClick={() => setIsWithdrawalModalOpen(true)} 
                                 disabled={analytics.availableLiquid <= 0 || isProcessing}
-                                className="px-14 py-6 bg-primary text-white rounded-[2rem] font-black uppercase text-[11px] tracking-[0.3em] shadow-2xl shadow-primary/30 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-4"
+                                className="px-8 sm:px-14 md:px-8 lg:px-14 py-5 sm:py-6 bg-primary text-white rounded-[2rem] font-black uppercase text-[10px] sm:text-[11px] tracking-[0.15em] lg:tracking-[0.3em] shadow-2xl shadow-primary/30 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-30 flex items-center justify-center gap-4 whitespace-nowrap"
                             >
-                                {isProcessing ? <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></div> : <PlusIcon className="w-6 h-6" />}
+                                {isProcessing ? <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></div> : <PlusIcon className="w-5 h-5 sm:w-6 sm:h-6" />}
                                 Request Dividend
                             </button>
                         )}

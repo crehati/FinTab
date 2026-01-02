@@ -225,7 +225,7 @@ const OwnerProfile: React.FC<OwnerProfileProps> = ({
                 <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-10">
                     <div className="flex flex-col md:flex-row items-center md:items-start gap-10 text-center md:text-left">
                         <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                            <img src={currentUser.avatarUrl} className="w-32 h-32 rounded-[3rem] object-cover border-4 border-white/10 shadow-2xl group-hover:opacity-75 transition-all" />
+                            <img src={currentUser.avatarUrl} className="w-24 h-24 sm:w-32 sm:h-32 rounded-[3rem] object-cover border-4 border-white/10 shadow-2xl group-hover:opacity-75 transition-all" />
                             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-md rounded-[3rem]">
                                 <span className="bg-white text-slate-900 text-[9px] font-black uppercase px-6 py-2.5 rounded-xl">Edit Identity</span>
                             </div>
@@ -233,7 +233,7 @@ const OwnerProfile: React.FC<OwnerProfileProps> = ({
                         </div>
                         <div>
                             <div className="flex flex-col md:flex-row md:items-center gap-6">
-                                <h1 className="text-5xl md:text-6xl font-black uppercase tracking-tighter leading-none">{currentUser.name}</h1>
+                                <h1 className="text-4xl md:text-5xl lg:text-6xl font-black uppercase tracking-tighter leading-none">{currentUser.name}</h1>
                                 <span className="inline-block px-6 py-2 bg-white/10 backdrop-blur-md rounded-full text-[11px] font-black uppercase tracking-[0.4em] border border-white/10">Principal Owner</span>
                             </div>
                             <div className="flex items-center gap-4 mt-8">
@@ -242,12 +242,12 @@ const OwnerProfile: React.FC<OwnerProfileProps> = ({
                             </div>
                         </div>
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                        <button onClick={() => setIsSwapModalOpen(true)} className="px-10 py-6 bg-white/10 text-white rounded-[2rem] font-black uppercase text-[11px] tracking-[0.3em] hover:bg-white/20 transition-all flex items-center justify-center active:scale-95 border border-white/10">
+                    <div className="flex flex-col sm:flex-row md:flex-col lg:flex-row gap-4 justify-center">
+                        <button onClick={() => setIsSwapModalOpen(true)} className="px-6 sm:px-10 md:px-6 lg:px-10 py-5 sm:py-6 bg-white/10 text-white rounded-[2rem] font-black uppercase text-[10px] sm:text-[11px] tracking-widest hover:bg-white/20 transition-all flex items-center justify-center active:scale-95 border border-white/10 backdrop-blur-md whitespace-nowrap">
                              Swap Profile
                         </button>
-                        <button onClick={() => setIsPaymentModalOpen(true)} className="px-12 py-6 bg-primary text-white rounded-[2rem] font-black uppercase text-[11px] tracking-[0.3em] shadow-2xl shadow-primary/30 hover:bg-blue-700 transition-all flex items-center justify-center active:scale-95">
-                            <PlusIcon className="w-6 h-6 mr-3" /> Remittance
+                        <button onClick={() => setIsPaymentModalOpen(true)} className="px-8 sm:px-12 md:px-8 lg:px-12 py-5 sm:py-6 bg-primary text-white rounded-[2rem] font-black uppercase text-[10px] sm:text-[11px] tracking-[0.15em] lg:tracking-[0.3em] shadow-2xl shadow-primary/30 hover:bg-blue-700 transition-all flex items-center justify-center active:scale-95 whitespace-nowrap">
+                            <PlusIcon className="w-5 h-5 sm:w-6 sm:h-6 mr-3" /> Remittance
                         </button>
                     </div>
                 </div>

@@ -44,6 +44,7 @@
             animation: {
               'fade-in': 'fadeIn 0.4s ease-out',
               'scale-in': 'scaleIn 0.2s ease-out',
+              'fade-in-up': 'fadeInUp 0.3s ease-out forwards',
             },
             keyframes: {
               fadeIn: {
@@ -53,6 +54,10 @@
               scaleIn: {
                 '0%': { transform: 'scale(0.95)', opacity: '0' },
                 '100%': { transform: 'scale(1)', opacity: '1' },
+              },
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
               }
             }
           }
@@ -72,7 +77,9 @@
     "recharts": "https://aistudiocdn.com/recharts@^3.2.1",
     "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.1",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^0.12.0",
-    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm"
+    "@supabase/supabase-js": "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
