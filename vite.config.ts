@@ -3,13 +3,13 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-  // Use the global process object available in Node.js environment
-  // Fix: Cast process to any to access cwd() when Node types are not fully recognized in the current execution context
+  // Load environment variables from process.env and .env files
   const env = loadEnv(mode, (process as any).cwd(), '');
   
   return {
     plugins: [react()],
     define: {
+      // Prioritize API_KEY, fallback to empty string if not found
       'process.env.API_KEY': JSON.stringify(env.API_KEY || env.VITE_API_KEY || ''),
       'process.env.NODE_ENV': JSON.stringify(mode),
     },
@@ -19,11 +19,11 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: false,
-      // Massive limit to ensure the build logs remain green (no orange warnings)
+      // Suppress chunk size warnings in the build logs
       chunkSizeWarningLimit: 10000,
       rollupOptions: {
         output: {
-          format: 'es',
+          // Allow Vite to manage the format automatically
         },
       },
     },
