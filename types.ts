@@ -472,8 +472,7 @@ export type ModuleKey =
   | 'INVESTORS' 
   | 'REPORTS' 
   | 'FINANCE' 
-  | 'SETTINGS'
-  | 'AI';
+  | 'SETTINGS';
 
 export type UserPermissions = Partial<Record<ModuleKey, Record<string, boolean>>>;
 

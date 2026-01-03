@@ -12,7 +12,6 @@ import {
     ProformaIcon, 
     ExpensesIcon, 
     SettingsIcon, 
-    ChatHelpIcon, 
     CommissionIcon, 
     InvestorIcon,
     ProfileIcon,
@@ -58,7 +57,6 @@ const More: React.FC<MoreProps> = ({ t, currentUser, permissions }) => {
     ];
     
     const applicationItems: MoreItem[] = [
-        { to: '/chat-help', text: t('sidebar.chatHelp'), icon: <ChatHelpIcon />, module: 'AI', action: 'view_assistant' },
         { to: '/settings', text: t('sidebar.settings'), icon: <SettingsIcon />, module: 'SETTINGS', action: 'view_settings' },
     ];
 
