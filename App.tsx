@@ -58,6 +58,7 @@ import Directory from './components/Directory';
 import AlertsPage from './components/AlertsPage';
 import PublicStorefront from './components/PublicStorefront';
 import BankAccountsPage from './components/BankAccounts';
+import AIAssistant from './components/AIAssistant';
 
 const ScrollToTop = () => {
     const { pathname } = useLocation();
@@ -465,6 +466,7 @@ const App = () => {
                         <Route path="/transactions" element={currentUser && activeBusinessId ? <Transactions {...{ sales, deposits, bankAccounts, users, receiptSettings, currentUser, onRequestDeposit: (amt, desc, bid) => { const d = { id: `dep-${Date.now()}`, date: new Date().toISOString(), amount: amt, description: desc, userId: currentUser.id, status: 'pending', bankAccountId: bid }; handleUpdateDeposits([d, ...deposits]); }, t }} /> : <Navigate to="/login" />} />
                         <Route path="/commission" element={currentUser && activeBusinessId ? <Commission {...{ products, setProducts: handleUpdateProducts, t, receiptSettings }} /> : <Navigate to="/login" />} />
                         <Route path="/investors" element={currentUser && activeBusinessId ? <InvestorPage {...{ users, sales, expenses, products, t, receiptSettings, currentUser, onSaveUser: (u, edit, id) => { const updated = edit ? users.map(old => old.id === id ? { ...old, ...u } : old) : [{ ...u, id: `u-${Date.now()}`, avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}` }, ...users]; handleUpdateUsers(updated); }, onDeleteUser: (id) => { const updated = users.filter(u => u.id !== id); handleUpdateUsers(updated); }, businessSettings, businessProfile, permissions }} /> : <Navigate to="/login" />} />
+                        <Route path="/chat-help" element={currentUser && activeBusinessId ? <AIAssistant {...{ currentUser, sales, products, expenses, customers, users, expenseRequests, cashCounts, goodsCosting: goodsCostings, goodsReceiving: goodsReceivings, anomalyAlerts, businessSettings, lowStockThreshold: 10, t, receiptSettings, permissions, setProducts: handleUpdateProducts, setSales: handleUpdateSales, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); }, notifications }} /> : <Navigate to="/login" />} />
 
                         <Route path="/" element={<Navigate to={currentUser ? (activeBusinessId ? "/dashboard" : "/select-business") : "/login"} replace />} />
                         <Route path="*" element={<Navigate to="/" replace />} />

@@ -11,8 +11,6 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // Prioritize system environment variables (Vercel) over local .env files
-      'process.env.API_KEY': JSON.stringify(process.env.API_KEY || env.API_KEY || env.VITE_API_KEY || ''),
       'process.env.NODE_ENV': JSON.stringify(mode),
     },
     build: {

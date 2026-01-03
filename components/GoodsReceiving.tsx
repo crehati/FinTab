@@ -1,13 +1,12 @@
 
 // @ts-nocheck
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { GoogleGenAI, Type } from "@google/genai";
 import type { GoodsReceiving, User, Product, ReceiptSettingsData, AppPermissions, CashCountSignature, BusinessSettingsData, BusinessProfile } from '../types';
 import Card from './Card';
 import EmptyState from './EmptyState';
 import FinanceReportModal from './FinanceReportModal';
 import ModalShell from './ModalShell';
-import { TruckIcon, PlusIcon, CloseIcon, WarningIcon, FilePdfIcon, AIIcon } from '../constants';
+import { TruckIcon, PlusIcon, CloseIcon, WarningIcon, FilePdfIcon } from '../constants';
 import { hasAccess } from '../lib/permissions';
 import { notify } from './Toast';
 
@@ -31,8 +30,6 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
 }) => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [reportToShow, setReportToShow] = useState<GoodsReceiving | null>(null);
-    const [isAiProcessing, setIsAiProcessing] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const isOwnerOrAdmin = currentUser?.role === 'Owner' || currentUser?.role === 'Super Admin';
     const workflowRoles = businessSettings?.workflowRoles || {};
@@ -83,72 +80,6 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
             }));
         } else {
             setFormData(prev => ({ ...prev, linkedProductId: '', productName: '', productNumber: '' }));
-        }
-    };
-
-    // AI VISION LOGIC: Extracts data from invoice or label
-    const handleAiScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setIsAiProcessing(true);
-        notify("Intelligence Node Activated: Analyzing Invoice", "info");
-
-        try {
-            const reader = new FileReader();
-            const base64Promise = new Promise((resolve) => {
-                reader.onload = () => resolve(reader.result.split(',')[1]);
-                reader.readAsDataURL(file);
-            });
-
-            const base64Data = await base64Promise;
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-pro-preview',
-                contents: {
-                    parts: [
-                        { inlineData: { data: base64Data, mimeType: file.type } },
-                        { text: "Extract shipping/receiving data from this image. Return JSON with fields: refNumber, productNumber (SKU), productName, quantity (integer). If a field is missing, use empty string. Focus on high precision for numbers." }
-                    ]
-                },
-                config: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: Type.OBJECT,
-                        properties: {
-                            refNumber: { type: Type.STRING },
-                            productNumber: { type: Type.STRING },
-                            productName: { type: Type.STRING },
-                            quantity: { type: Type.INTEGER }
-                        }
-                    }
-                }
-            });
-
-            const result = JSON.parse(response.text);
-            
-            // Link to existing product if SKU matches
-            const matchedProduct = products.find(p => p.sku === result.productNumber || p.id.slice(-8).toUpperCase() === result.productNumber);
-
-            setFormData(prev => ({
-                ...prev,
-                refNumber: result.refNumber || prev.refNumber,
-                productNumber: result.productNumber || prev.productNumber,
-                productName: matchedProduct ? matchedProduct.name : (result.productName || prev.productName),
-                receivedQty: result.quantity ? String(result.quantity) : prev.receivedQty,
-                expectedQty: result.quantity ? String(result.quantity) : prev.expectedQty,
-                linkedProductId: matchedProduct ? matchedProduct.id : prev.linkedProductId
-            }));
-
-            notify("Analysis Complete: Form populated.", "success");
-            if (!isAddModalOpen) setIsAddModalOpen(true);
-        } catch (err) {
-            console.error("AI Analysis Failed:", err);
-            notify("Scan Protocol Failure: Please enter data manually.", "error");
-        } finally {
-            setIsAiProcessing(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
@@ -327,15 +258,6 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Verification Protocol (Entry → Verify → Approve)</p>
                 </div>
                 <div className="flex gap-4">
-                    <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleAiScan} capture="environment" />
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isAiProcessing}
-                        className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-bold uppercase tracking-widest text-[10px] shadow-xl hover:bg-black transition-all flex items-center gap-3 active:scale-95 disabled:opacity-50"
-                    >
-                        {isAiProcessing ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <AIIcon className="w-5 h-5 text-primary" />}
-                        AI Invoice Scan
-                    </button>
                     <button
                         onClick={() => setIsAddModalOpen(true)}
                         className="bg-primary text-white px-8 py-3 rounded-2xl font-bold uppercase tracking-widest text-[10px] shadow-xl shadow-primary/20 hover:opacity-90 active:scale-95 transition-all flex items-center gap-2"
@@ -426,7 +348,7 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
                         <EmptyState 
                             icon={<TruckIcon />} 
                             title="Ledger Clean" 
-                            description="No inventory arrival records found. Use AI Scan to quickly process an invoice."
+                            description="No inventory arrival records found. Enroll a shipment manually to initialize the audit trail."
                             action={{ label: "Manual Log Entry", onClick: () => setIsAddModalOpen(true) }}
                         />
                     )}
@@ -458,27 +380,27 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2 block">Ref Number *</label>
-                                <input type="text" value={formData.refNumber} onChange={e => setFormData({...formData, refNumber: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold outline-none" placeholder="RECV-XXXX" />
+                                <input type="text" value={formData.refNumber} onChange={e => setFormData({...formData, refNumber: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-bold outline-none" placeholder="RECV-XXXX" />
                             </div>
                             <div>
                                 <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2 block">Product Identifier</label>
-                                <input type="text" value={formData.productNumber} onChange={e => setFormData({...formData, productNumber: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold outline-none" placeholder="SKU-XXXX" />
+                                <input type="text" value={formData.productNumber} onChange={e => setFormData({...formData, productNumber: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-bold outline-none" placeholder="SKU-XXXX" />
                             </div>
                         </div>
 
                         <div>
                             <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2 block">Product Display Name</label>
-                            <input type="text" value={formData.productName} onChange={e => setFormData({...formData, productName: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold outline-none" placeholder="Enter name..." />
+                            <input type="text" value={formData.productName} onChange={e => setFormData({...formData, productName: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-bold outline-none" placeholder="Enter name..." />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2 block">Expected Qty *</label>
-                                <input type="number" value={formData.expectedQty} onChange={e => setFormData({...formData, expectedQty: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold outline-none tabular-nums" placeholder="0" />
+                                <input type="number" value={formData.expectedQty} onChange={e => setFormData({...formData, expectedQty: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-bold outline-none tabular-nums" placeholder="0" />
                             </div>
                             <div>
                                 <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 px-1 mb-2 block">Received Qty *</label>
-                                <input type="number" value={formData.receivedQty} onChange={e => setFormData({...formData, receivedQty: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-900 border-none rounded-2xl p-4 text-sm font-bold outline-none tabular-nums" placeholder="0" />
+                                <input type="number" value={formData.receivedQty} onChange={e => setFormData({...formData, receivedQty: e.target.value})} className="w-full bg-slate-50 dark:bg-gray-800 border-none rounded-2xl p-4 text-sm font-bold outline-none tabular-nums" placeholder="0" />
                             </div>
                         </div>
 

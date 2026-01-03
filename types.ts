@@ -43,8 +43,7 @@ export interface WorkflowRoleAssignment {
 export type WorkflowRoleKey = 
   | 'cashCounter' | 'cashVerifier' | 'cashApprover'
   | 'receivingClerk' | 'receivingVerifier' | 'receivingApprover'
-  | 'costingManager' | 'costingApprover'
-  | 'stockManager' | 'stockVerifier' | 'stockApprover';
+  | 'costingManager' | 'costingApprover' | 'stockManager' | 'stockVerifier' | 'stockApprover';
 
 export type WorkflowRoles = Record<WorkflowRoleKey, WorkflowRoleAssignment[]>;
 
