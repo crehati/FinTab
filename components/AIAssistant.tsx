@@ -37,8 +37,6 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     const [isLoading, setIsLoading] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    const apiKey = process.env.API_KEY;
-
     const contextStr = useMemo(() => {
         const safeSales = sales || [];
         const safeProducts = products || [];
@@ -76,11 +74,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
-        if (!apiKey) {
-            setMessages(prev => [...prev, { role: 'model', text: "Protocol Blocked: Gemini API Key is not configured in the Vercel environment variables." }]);
-            return;
-        }
-
+        
         const currentInput = input;
         const newMessages = [...messages, { role: 'user' as const, text: currentInput }];
         setMessages(newMessages);
@@ -88,9 +82,11 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         setIsLoading(true);
 
         try {
-            const ai = new GoogleGenAI({ apiKey: apiKey });
+            // Fix: Initialization strictly using process.env.API_KEY as per GenAI guidelines
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            // Fix: Using gemini-3-pro-preview for complex business data analysis tasks
             const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
+                model: 'gemini-3-pro-preview',
                 contents: [{ role: 'user', parts: [{ text: `Context:\n${contextStr}\n\nUser Question: ${currentInput}` }] }],
                 config: {
                     systemInstruction: "You are the FinTab Intelligence Agent. Help users analyze their business metrics and operational data. Be professional, data-driven, and concise. If sensitive profit data is requested, assume the operator has clearance."
@@ -102,7 +98,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
             }
         } catch (error) {
             console.error("AI Node Error:", error);
-            setMessages(prev => [...prev, { role: 'model', text: "Protocol Error: Intelligence node connection failed." }]);
+            setMessages(prev => [...prev, { role: 'model', text: "Protocol Error: Intelligence node connection failed. Please ensure the terminal node is properly configured with an authorized API key." }]);
         } finally {
             setIsLoading(false);
         }
@@ -123,13 +119,6 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                     </div>
                 </div>
             </header>
-
-            {!apiKey && (
-                <div className="bg-rose-50 p-4 border-b border-rose-100 flex items-center gap-3">
-                    <WarningIcon className="w-5 h-5 text-rose-500" />
-                    <p className="text-[10px] font-black text-rose-600 uppercase tracking-tight">System Notice: AI API Key missing from Vercel Node.</p>
-                </div>
-            )}
 
             <main className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                 {messages.length === 0 && (
