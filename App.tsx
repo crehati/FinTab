@@ -59,7 +59,6 @@ import AlertsPage from './components/AlertsPage';
 import PublicStorefront from './components/PublicStorefront';
 import BankAccountsPage from './components/BankAccounts';
 import AIAssistant from './components/AIAssistant';
-import BottomNavBar from './components/BottomNavBar';
 
 const ScrollToTop = () => {
     const { pathname } = useLocation();
@@ -473,9 +472,6 @@ const App = () => {
                         <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                 </main>
-                {currentUser && activeBusinessId && (
-                    <BottomNavBar t={t} cart={cart} currentUser={currentUser} permissions={permissions} />
-                )}
             </div>
             {syncStatus === 'syncing' && (
                 <div className="fixed bottom-4 left-4 z-[300] bg-slate-900 text-white text-[8px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-lg border border-white/10 flex items-center gap-2 animate-fade-in">

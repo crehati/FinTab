@@ -2,8 +2,7 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
-import { formatCurrency, getStoredItem } from '../lib/utils';
-import { AIIcon, CloseIcon, PlusIcon, WarningIcon, SearchIcon } from '../constants';
+import { AIIcon, WarningIcon, SearchIcon } from '../constants';
 import type { User, Sale, Product, Expense, Customer, ExpenseRequest, CashCount, GoodsCosting, GoodsReceiving, AnomalyAlert, BusinessSettingsData, ReceiptSettingsData, AppPermissions, AppNotification } from '../types';
 import { notify } from './Toast';
 
@@ -39,10 +38,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     const [messages, setMessages] = useState<{ role: 'user' | 'model' | 'system', text: string, type?: 'anomaly' | 'error' | 'success' }[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [isAuditing, setIsAuditing] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
-
-    const API_KEY = process.env.API_KEY;
 
     // Agentic Toolset for FinTab OS
     const tools = useMemo(() => [
@@ -50,12 +46,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
             functionDeclarations: [
                 {
                     name: 'adjust_stock',
-                    description: 'Directly modify inventory levels for a product.',
+                    description: 'Directly modify inventory levels for a product based on operator command.',
                     parameters: {
                         type: Type.OBJECT,
                         properties: {
-                            productId: { type: Type.STRING, description: 'The product ID or SKU.' },
-                            quantity: { type: Type.NUMBER, description: 'Amount to change (positive or negative).' },
+                            productId: { type: Type.STRING, description: 'The product ID, name, or SKU.' },
+                            quantity: { type: Type.NUMBER, description: 'Amount to change (positive for add, negative for remove).' },
                             reason: { type: Type.STRING, description: 'Rationale for the manual shift.' }
                         },
                         required: ['productId', 'quantity', 'reason']
@@ -72,29 +68,30 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         str += `- Inventory Size: ${products?.length || 0} items\n`;
         const rev = (sales || []).filter(s => s.status === 'completed').reduce((s, x) => s + (x.total || 0), 0);
         str += `- Lifetime Revenue: ${cs}${rev.toFixed(2)}\n`;
-        str += `\n[LEDGER DATA]\n` + (products || []).slice(0, 10).map(p => `- ${p.name}: ${p.stock} units @ ${cs}${p.price}`).join('\n');
+        str += `\n[LEDGER DATA (TOP 10)]\n` + (products || []).slice(0, 10).map(p => `- ${p.name}: ${p.stock} units @ ${cs}${p.price}`).join('\n');
         return str;
     }, [sales, products, receiptSettings, currentUser]);
 
-    // Cold Boot Sequence
     useEffect(() => {
         if (messages.length === 0) {
-            setMessages([{ role: 'model', text: "Intelligence Node Initialized. Systems nominal. How can I assist with your terminal logic today?", type: 'success' }]);
+            setMessages([{ role: 'model', text: "Intelligence Node Initialized. Systems nominal. I have access to your terminal context. How can I assist with your operations today?", type: 'success' }]);
         }
     }, []);
 
     const handleSend = async () => {
-        if (!input.trim() || isLoading) return;
+        const operatorInput = input.trim();
+        if (!operatorInput || isLoading) return;
         
-        const operatorInput = input;
         setMessages(prev => [...prev, { role: 'user', text: operatorInput }]);
         setInput('');
         setIsLoading(true);
 
-        if (!API_KEY || API_KEY.length < 5) {
+        const API_KEY = process.env.API_KEY;
+
+        if (!API_KEY || API_KEY === "") {
             setMessages(prev => [...prev, { 
                 role: 'model', 
-                text: "CRITICAL FAULT: API Key not detected in production environment. Verify Vercel secrets and rebuild node.", 
+                text: "CRITICAL FAULT: API Key missing in environment. Ensure the 'API_KEY' secret is configured in your deployment settings.", 
                 type: 'error' 
             }]);
             setIsLoading(false);
@@ -106,41 +103,48 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
             const response = await ai.models.generateContent({
                 model: 'gemini-3-pro-preview',
                 contents: [
-                    { text: `OS CONTEXT:\n${contextStr}` },
-                    { text: `OPERATOR CMD: ${operatorInput}` }
+                    { text: `SYSTEM CONTEXT:\n${contextStr}` },
+                    { text: `OPERATOR INSTRUCTION: ${operatorInput}` }
                 ],
                 config: {
                     tools: tools,
-                    systemInstruction: "You are the FinTab POS Intelligence core. Be technical, efficient, and proactive. Use the adjust_stock tool if the operator asks to change inventory levels."
+                    systemInstruction: "You are the FinTab OS Intelligence Core. Act as an expert operations agent. Be technical, efficient, and proactive. Use the adjust_stock tool only when explicitly asked to change inventory. Analyze data accurately when asked for reports or summaries."
                 }
             });
+
+            let finalResponseText = response.text || "";
 
             if (response.functionCalls && response.functionCalls.length > 0) {
                 for (const fc of response.functionCalls) {
                     if (fc.name === 'adjust_stock') {
                         const { productId, quantity, reason } = fc.args;
-                        const product = products.find(p => p.id === productId || p.sku === productId || p.name === productId);
+                        const product = products.find(p => p.id === productId || p.sku === productId || p.name.toLowerCase() === productId.toLowerCase());
+                        
                         if (product) {
                             const nextStock = (product.stock || 0) + quantity;
                             const updated = products.map(p => p.id === product.id ? { ...p, stock: nextStock } : p);
                             setProducts(updated);
-                            setMessages(prev => [...prev, { role: 'model', text: `PROTOCOL SYNC: Authorized ${quantity} unit shift for "${product.name}". New Balance: ${nextStock}. Rationale: ${reason}.` }]);
+                            finalResponseText += `\n\n[PROTOCOL SYNC: Authorized ${quantity} unit shift for "${product.name}". New Balance: ${nextStock}. Rationale: ${reason}.]`;
                             notify("Inventory logic updated by AI", "success");
                         } else {
-                            setMessages(prev => [...prev, { role: 'model', text: `SYNC FAILURE: Identifer "${productId}" not found in current ledger.` }]);
+                            finalResponseText += `\n\n[SYNC FAILURE: Identifier "${productId}" not found in current ledger.]`;
                         }
                     }
                 }
-            } else if (response.text) {
-                setMessages(prev => [...prev, { role: 'model', text: response.text }]);
             }
+
+            setMessages(prev => [...prev, { role: 'model', text: finalResponseText.trim() }]);
         } catch (error) {
-            console.error("AI Node Breach:", error);
-            setMessages(prev => [...prev, { 
-                role: 'model', 
-                text: `Protocol Error: Intelligence node connection failed. Ensure your API Key is correctly set in the environment and that the model 'gemini-3-pro-preview' is accessible.`, 
-                type: 'error' 
-            }]);
+            console.error("AI Communication Breach:", error);
+            let errorMessage = "Protocol Error: Intelligence node handshake failed. Please verify API availability.";
+            
+            if (error.message?.includes("API key not valid")) {
+                errorMessage = "Security Error: Authorized credentials (API Key) rejected by gateway.";
+            } else if (error.message?.includes("User location is not supported")) {
+                errorMessage = "Regional Constraint: Gemini API is currently restricted in your geographic node.";
+            }
+            
+            setMessages(prev => [...prev, { role: 'model', text: errorMessage, type: 'error' }]);
         } finally {
             setIsLoading(false);
         }
@@ -151,8 +155,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     }, [messages, isLoading]);
 
     return (
-        <div className="flex flex-col h-[calc(100vh-14rem)] bg-slate-50 dark:bg-gray-950 rounded-[3rem] shadow-2xl border border-slate-200 dark:border-gray-800 overflow-hidden font-sans relative">
-            {/* Telemetry Header */}
+        <div className="flex flex-col h-[calc(100vh-12rem)] bg-slate-50 dark:bg-gray-950 rounded-[3rem] shadow-2xl border border-slate-200 dark:border-gray-800 overflow-hidden font-sans relative">
             <header className="px-10 py-8 border-b dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl flex items-center justify-between z-20">
                 <div className="flex items-center gap-6">
                     <div className="bg-slate-900 p-4 rounded-[1.5rem] text-primary shadow-2xl relative">
@@ -162,7 +165,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                     <div>
                         <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 dark:text-white">OS Intelligence Node</h2>
                         <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Protocol Version: 3.1.Pro-Vercel</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Grid Identity: {currentUser.role} Node</span>
                         </div>
                     </div>
                 </div>
@@ -172,8 +175,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                 </div>
             </header>
 
-            {/* Content Stream */}
-            <main className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar relative z-10">
+            <main className="flex-1 overflow-y-auto p-8 sm:p-10 space-y-10 custom-scrollbar relative z-10">
                 {messages.map((m, i) => (
                     <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
                         <div className={`max-w-[85%] p-6 rounded-[2.5rem] shadow-sm ${
@@ -207,8 +209,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                 <div ref={scrollRef} className="h-4" />
             </main>
 
-            {/* Operator Input */}
-            <footer className="p-10 border-t dark:border-gray-800 bg-white dark:bg-gray-950 z-20">
+            <footer className="p-8 sm:p-10 border-t dark:border-gray-800 bg-white dark:bg-gray-950 z-20">
                 <div className="flex gap-4">
                     <div className="relative flex-1 group">
                         <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
@@ -219,20 +220,17 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder="Inquire about sales, inventory, or trends..."
+                            placeholder="Instruct the system intelligence..."
                             className="w-full bg-slate-50 dark:bg-gray-900 border-2 border-transparent focus:border-primary/20 rounded-3xl pl-16 pr-8 py-5 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-400 shadow-inner transition-all outline-none"
                         />
                     </div>
                     <button 
                         onClick={handleSend}
                         disabled={isLoading || !input.trim()}
-                        className="bg-primary text-white px-12 rounded-3xl font-black uppercase text-[11px] tracking-[0.3em] shadow-2xl shadow-primary/30 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale flex-shrink-0"
+                        className="bg-primary text-white px-10 sm:px-14 rounded-3xl font-black uppercase text-[11px] tracking-[0.3em] shadow-2xl shadow-primary/30 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale flex-shrink-0"
                     >
                         {isLoading ? 'Syncing...' : 'Send'}
                     </button>
-                </div>
-                <div className="mt-4 text-center">
-                    <p className="text-[8px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-[0.5em]">Authorized Data Extraction Node • Gemini 3.0 Engine</p>
                 </div>
             </footer>
         </div>
