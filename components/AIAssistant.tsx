@@ -82,9 +82,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         setIsLoading(true);
 
         try {
-            // Fix: Initialization strictly using process.env.API_KEY as per GenAI guidelines
+            // Strictly using process.env.API_KEY as per GenAI instructions
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            // Fix: Using gemini-3-pro-preview for complex business data analysis tasks
+            
             const response = await ai.models.generateContent({
                 model: 'gemini-3-pro-preview',
                 contents: [{ role: 'user', parts: [{ text: `Context:\n${contextStr}\n\nUser Question: ${currentInput}` }] }],
@@ -98,7 +98,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
             }
         } catch (error) {
             console.error("AI Node Error:", error);
-            setMessages(prev => [...prev, { role: 'model', text: "Protocol Error: Intelligence node connection failed. Please ensure the terminal node is properly configured with an authorized API key." }]);
+            setMessages(prev => [...prev, { role: 'model', text: "Protocol Error: Intelligence node connection failed. Ensure your API Key is correctly set in the environment and try again." }]);
         } finally {
             setIsLoading(false);
         }
