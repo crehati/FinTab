@@ -13,12 +13,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    chunkSizeWarningLimit: 1000, // Suppresses the "yellow line" warning in Vercel logs
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom', 'recharts'],
-          genai: ['@google/genai'],
-          supabase: ['@supabase/supabase-js'],
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'ui-vendor': ['recharts', 'lucide-react'],
+          'core-vendor': ['@google/genai', '@supabase/supabase-js'],
         },
       },
     },
