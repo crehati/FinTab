@@ -55,7 +55,7 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose, receiptSetti
         if (!receiptRef.current) return;
         try {
             await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'html2canvas');
-            const canvas = await (window as any).html2canvas(receiptRef.current, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
+            const canvas = await (window as any).html2canvas(receiptRef.current, { scale: 3, useCORS: true, backgroundColor: '#f3f4f6' });
             const link = document.createElement('a');
             link.download = `${isProforma ? 'proforma' : 'receipt'}-${sale.id.slice(-6).toUpperCase()}.jpg`;
             link.href = canvas.toDataURL('image/jpeg', 0.95);
@@ -67,144 +67,140 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose, receiptSetti
         <ModalShell 
             isOpen={!!sale} 
             onClose={onClose} 
-            title={isProforma ? 'Proforma Invoice' : 'Sales Receipt'}
-            description={`Ref: ${receiptSettings.receiptPrefix}${sale.id.slice(-6).toUpperCase()}`}
-            maxWidth="max-w-lg"
+            title={isProforma ? 'Proforma Hub' : 'Verified Receipt'}
+            description={`Log Reference: ${receiptSettings.receiptPrefix}${sale.id.slice(-6).toUpperCase()}`}
+            maxWidth="max-w-xl"
         >
-            <div className="relative">
-                {/* Action Bar: Top Middle */}
-                <div className="flex justify-center gap-4 mb-8 no-print">
+            <div className="relative font-sans">
+                {/* Master Actions Bar */}
+                <div className="flex justify-center gap-4 mb-10 no-print sticky top-0 z-30">
                     <button 
                         onClick={() => window.print()} 
-                        title="Print" 
-                        className="p-4 bg-slate-50 dark:bg-gray-800 text-slate-500 dark:text-slate-400 rounded-3xl hover:bg-primary hover:text-white transition-all shadow-sm active:scale-95"
+                        className="flex-1 flex items-center justify-center gap-3 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all shadow-xl active:scale-95"
                     >
-                        <PrintIcon className="w-5 h-5" />
+                        <PrintIcon className="w-4 h-4" /> Print
                     </button>
-                    {isFinalized && (
-                        <button 
-                            onClick={generateAndDownloadJpg} 
-                            title="Download JPG" 
-                            className="p-4 bg-slate-50 dark:bg-gray-800 text-slate-500 dark:text-slate-400 rounded-3xl hover:bg-primary hover:text-white transition-all shadow-sm active:scale-95"
-                        >
-                            <DownloadJpgIcon className="w-5 h-5" />
-                        </button>
-                    )}
+                    <button 
+                        onClick={generateAndDownloadJpg} 
+                        className="flex-1 flex items-center justify-center gap-3 py-4 bg-white border-2 border-slate-100 text-slate-600 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+                    >
+                        <DownloadJpgIcon className="w-4 h-4" /> Save Image
+                    </button>
                     {canDelete && (
                         <button 
                             onClick={() => setIsConfirmOpen(true)} 
-                            title="Purge Record" 
-                            className="p-4 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-3xl hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95"
+                            className="p-4 bg-rose-50 text-rose-500 rounded-2xl hover:bg-rose-600 hover:text-white transition-all shadow-sm active:scale-95"
                         >
                             <DeleteIcon className="w-5 h-5" />
                         </button>
                     )}
                 </div>
 
-                {/* Receipt Content */}
-                <div ref={receiptRef} className="font-sans text-gray-900 bg-white max-w-[400px] mx-auto text-[11px] py-10 px-8">
-                    {/* Header: Business Info */}
-                    <div className="text-center mb-6">
-                        {receiptSettings.logo && <img src={receiptSettings.logo} className="w-20 mx-auto mb-4 object-contain" alt="Logo" />}
-                        <h2 className="text-2xl font-bold">{receiptSettings.businessName}</h2>
-                        {receiptSettings.slogan && <p className="text-sm italic text-gray-500">{receiptSettings.slogan}</p>}
-                        <p className="text-xs mt-3 text-gray-600 font-medium">Sold by: {user?.name || 'System User'}</p>
-                    </div>
-
-                    {/* Title Section */}
-                    <div className="py-3 border-t border-b border-gray-900 text-center mb-6">
-                        <h3 className="text-2xl font-bold">{isProforma ? 'Proforma Invoice' : 'Sales Receipt'}</h3>
-                    </div>
-
-                    {/* Customer & Receipt Metadata */}
-                    <div className="text-center mb-6 space-y-1">
-                        <h4 className="text-xl font-bold">{customerName}</h4>
-                        {customer?.phone && <p className="text-sm font-medium text-gray-600">{customer.phone}</p>}
-                        <p className="text-sm mt-3 font-medium">{isProforma ? labels.proformaNumber : labels.receiptNumber} {receiptSettings.receiptPrefix}{sale.id.slice(-6).toUpperCase()}</p>
-                        <p className="text-sm font-medium">{new Date(sale.date).toLocaleString()}</p>
-                    </div>
-
-                    {/* Summary Table */}
-                    <div className="bg-gray-50/50 rounded-xl border border-gray-100 overflow-hidden mb-6">
-                        <table className="w-full text-[11px] table-fixed">
-                            <thead className="bg-gray-50/80">
-                                <tr className="text-gray-900 font-bold border-b border-gray-200">
-                                    <th className="py-2 px-3 text-left w-[33%]">Mode</th>
-                                    <th className="py-2 px-3 text-center w-[25%]">Items</th>
-                                    <th className="py-2 px-3 text-center w-[17%]">Units</th>
-                                    <th className="py-2 px-3 text-right w-[25%]">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr className="font-medium">
-                                    <td className="py-2 px-3 text-left truncate">{sale.paymentMethod || 'Cash'}</td>
-                                    <td className="py-2 px-3 text-center">{sale.items.length}</td>
-                                    <td className="py-2 px-3 text-center">{totalUnits}</td>
-                                    <td className="py-2 px-3 text-right font-bold">{formatCurrency(sale.total, cs)}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Detailed Item List */}
-                    <div className="border-t border-gray-900 pt-4 mb-8">
-                        <div className="grid grid-cols-12 gap-1 font-bold text-xs border-b border-gray-200 pb-2 mb-2">
-                            <div className="col-span-4">Item</div>
-                            <div className="col-span-3 text-center">Price</div>
-                            <div className="col-span-2 text-center">Qty</div>
-                            <div className="col-span-3 text-right">Total</div>
-                        </div>
-                        <div className="space-y-4">
-                            {sale.items.map((item, i) => {
-                                const price = getEffectivePrice(item);
-                                return (
-                                    <div key={i} className="grid grid-cols-12 gap-1 items-start text-xs">
-                                        <div className="col-span-4">
-                                            <p className="font-bold truncate">{item.product?.name || 'Asset'}</p>
-                                            <p className="text-[10px] text-gray-400 font-medium truncate">{item.product?.id?.slice(-8).toLowerCase()}</p>
-                                        </div>
-                                        <div className="col-span-3 text-center font-medium">{formatCurrency(price, cs)}</div>
-                                        <div className="col-span-2 text-center font-medium">{item.quantity}</div>
-                                        <div className="col-span-3 text-right font-bold">{formatCurrency(price * item.quantity, cs)}</div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Financial Totals */}
-                    <div className="space-y-2 border-t border-gray-900 pt-4">
-                        <div className="flex justify-between font-bold text-sm">
-                            <span>Subtotal</span>
-                            <span>{formatCurrency(sale.subtotal, cs)}</span>
-                        </div>
-                        {sale.discount > 0 && (
-                            <div className="flex justify-between font-bold text-sm text-rose-600">
-                                <span>Discount</span>
-                                <span>-{formatCurrency(sale.discount, cs)}</span>
+                {/* Physical Receipt Simulation */}
+                <div className="bg-slate-200/50 dark:bg-gray-800/30 p-4 sm:p-10 rounded-[3rem] border border-slate-100 dark:border-gray-800">
+                    <div ref={receiptRef} className="bg-white text-gray-950 max-w-[380px] mx-auto py-12 px-8 sm:px-12 shadow-[0_20px_50px_-10px_rgba(0,0,0,0.15)] rounded-sm relative overflow-hidden ring-8 ring-white">
+                        {/* Header: Business Info */}
+                        <div className="text-center mb-10">
+                            {receiptSettings.logo && <img src={receiptSettings.logo} className="w-24 mx-auto mb-6 object-contain grayscale opacity-90" alt="Logo" />}
+                            <h2 className="text-2xl font-black uppercase tracking-tighter leading-none mb-2">{receiptSettings.businessName}</h2>
+                            {receiptSettings.slogan && <p className="text-[10px] italic text-gray-400 font-bold uppercase tracking-widest">{receiptSettings.slogan}</p>}
+                            <div className="mt-8 pt-4 border-t border-gray-100">
+                                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-300">Terminal Authorization Certificate</p>
                             </div>
-                        )}
-                        <div className="flex justify-between font-black text-lg py-2 border-t border-b border-gray-900">
-                            <span>Grand Total</span>
-                            <span>{formatCurrency(sale.total, cs)}</span>
                         </div>
-                        {sale.paymentMethod === 'Cash' && sale.cashReceived !== undefined && (
-                            <>
-                                <div className="flex justify-between font-bold text-sm pt-2">
-                                    <span>Cash Received</span>
-                                    <span>{formatCurrency(sale.cashReceived, cs)}</span>
-                                </div>
-                                <div className="flex justify-between font-bold text-sm border-b border-gray-900 pb-2">
-                                    <span>Change</span>
-                                    <span>{formatCurrency(sale.change || 0, cs)}</span>
-                                </div>
-                            </>
-                        )}
-                    </div>
 
-                    {/* Footer */}
-                    <div className="text-center mt-10">
-                        {receiptSettings.thankYouNote && <p className="text-sm font-bold text-gray-700">{receiptSettings.thankYouNote}</p>}
+                        {/* Title Section */}
+                        <div className="py-4 border-y-2 border-gray-900 text-center mb-8 bg-gray-50/50">
+                            <h3 className="text-xl font-black uppercase tracking-[0.2em]">{isProforma ? 'Proforma Estimate' : 'Verified Receipt'}</h3>
+                        </div>
+
+                        {/* Metadata */}
+                        <div className="space-y-6 mb-10 text-center">
+                            <div>
+                                <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Authenticated For</p>
+                                <h4 className="text-lg font-black uppercase tracking-tight text-gray-900">{customerName}</h4>
+                                {customer?.phone && <p className="text-[10px] font-bold text-gray-500 tracking-widest mt-1">{customer.phone}</p>}
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 text-left border-t border-gray-100 pt-6">
+                                <div>
+                                    <p className="text-[8px] font-black text-gray-300 uppercase mb-1">Log Identifier</p>
+                                    <p className="text-[10px] font-black">{receiptSettings.receiptPrefix}{sale.id.slice(-6).toUpperCase()}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[8px] font-black text-gray-300 uppercase mb-1">Entry Timestamp</p>
+                                    <p className="text-[10px] font-black tabular-nums">{new Date(sale.date).toLocaleDateString()} {new Date(sale.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Items Table */}
+                        <div className="border-t-2 border-gray-900 pt-4 mb-10">
+                            <div className="grid grid-cols-12 gap-2 font-black text-[9px] uppercase tracking-widest border-b border-gray-100 pb-3 mb-4 text-gray-400">
+                                <div className="col-span-6">Identity</div>
+                                <div className="col-span-3 text-center">Qty</div>
+                                <div className="col-span-3 text-right">Sum</div>
+                            </div>
+                            <div className="space-y-6">
+                                {sale.items.map((item, i) => {
+                                    const price = getEffectivePrice(item);
+                                    return (
+                                        <div key={i} className="grid grid-cols-12 gap-2 items-start text-[11px]">
+                                            <div className="col-span-6">
+                                                <p className="font-black uppercase tracking-tight leading-tight">{item.product?.name || 'Asset'}</p>
+                                                <p className="text-[8px] text-gray-400 font-bold uppercase mt-1 tracking-widest">Val: {formatCurrency(price, cs)}</p>
+                                            </div>
+                                            <div className="col-span-3 text-center font-black tabular-nums">{item.quantity}</div>
+                                            <div className="col-span-3 text-right font-black tabular-nums">{formatCurrency(price * item.quantity, cs)}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Totals Section */}
+                        <div className="space-y-3 border-t-2 border-gray-900 pt-6">
+                            <div className="flex justify-between font-bold text-[10px] uppercase tracking-widest text-gray-400">
+                                <span>Total Sub-sum</span>
+                                <span className="tabular-nums">{formatCurrency(sale.subtotal, cs)}</span>
+                            </div>
+                            {sale.discount > 0 && (
+                                <div className="flex justify-between font-bold text-[10px] uppercase tracking-widest text-rose-500">
+                                    <span>Authorized Rebate</span>
+                                    <span className="tabular-nums">-{formatCurrency(sale.discount, cs)}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between items-end pt-4">
+                                <span className="text-[10px] font-black uppercase tracking-[0.3em] pb-1">Final Settlement</span>
+                                <span className="text-3xl font-black tabular-nums tracking-tighter">{formatCurrency(sale.total, cs)}</span>
+                            </div>
+                            
+                            <div className="mt-8 pt-8 border-t border-dashed border-gray-200">
+                                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
+                                    <span>Protocol</span>
+                                    <span>{sale.paymentMethod || 'Cash'}</span>
+                                </div>
+                                {sale.paymentMethod === 'Cash' && sale.cashReceived !== undefined && (
+                                    <>
+                                        <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">
+                                            <span>Received</span>
+                                            <span className="tabular-nums">{formatCurrency(sale.cashReceived, cs)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                            <span>Change</span>
+                                            <span className="tabular-nums">{formatCurrency(sale.change || 0, cs)}</span>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Official Stamp/Footer */}
+                        <div className="text-center mt-16 pb-4">
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] mb-4 text-gray-800">{receiptSettings.thankYouNote}</p>
+                            <div className="inline-block border-2 border-gray-900 px-4 py-1.5 transform -rotate-2">
+                                <p className="text-[9px] font-black uppercase tracking-[0.4em] leading-none">Verified • FT Node</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

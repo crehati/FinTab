@@ -1,8 +1,10 @@
+
 import React, { useRef } from 'react';
 import ReactDOM from 'react-dom';
 import type { CashCount, GoodsCosting, GoodsReceiving, WeeklyInventoryCheck, BusinessProfile, ReceiptSettingsData } from '../types';
 import { CloseIcon, PrintIcon, DownloadJpgIcon, WarningIcon } from '../constants';
 import { loadScript } from '../lib/dom-utils';
+import ModalShell from './ModalShell';
 
 interface FinanceReportModalProps {
     isOpen: boolean;
@@ -15,9 +17,8 @@ interface FinanceReportModalProps {
 
 const FinanceReportModal: React.FC<FinanceReportModalProps> = ({ isOpen, onClose, record, type, businessProfile, receiptSettings }) => {
     const reportRef = useRef<HTMLDivElement>(null);
-    const modalRoot = document.getElementById('modal-root');
     
-    if (!isOpen || !record || !modalRoot) return null;
+    if (!isOpen || !record) return null;
     const cs = receiptSettings.currencySymbol;
 
     const handleDownload = async () => {
@@ -33,186 +34,155 @@ const FinanceReportModal: React.FC<FinanceReportModalProps> = ({ isOpen, onClose
     };
 
     const renderCashCount = (data: CashCount) => (
-        <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-6">
+        <div className="space-y-10">
+            <div className="grid grid-cols-2 gap-10 border-b border-gray-100 pb-10">
                 <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Audit Date</p>
-                    <p className="font-bold text-slate-900">{data.date}</p>
+                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] mb-2">Audit Timestamp</p>
+                    <p className="text-sm font-black text-gray-900 uppercase tracking-tight">{data.date}</p>
                 </div>
-                <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Status</p>
-                    <p className="font-bold text-emerald-600 uppercase">ACCEPTED</p>
+                <div className="text-right">
+                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] mb-2">Node Lifecycle</p>
+                    <p className="text-sm font-black text-emerald-600 uppercase tracking-tight italic">Verified Acceptance</p>
                 </div>
             </div>
 
-            <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
-                <div className="flex justify-between">
-                    <span className="text-slate-500 font-medium">System Cash Total</span>
-                    <span className="font-bold tabular-nums">{cs}{data.systemTotal.toFixed(2)}</span>
+            <div className="space-y-6">
+                <div className="flex justify-between items-center text-sm font-bold text-gray-500 uppercase tracking-widest">
+                    <span>System Protocol Sum</span>
+                    <span className="tabular-nums">{cs}{data.systemTotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between">
-                    <span className="text-slate-500 font-medium">Counted Cash Amount</span>
-                    <span className="font-bold tabular-nums text-primary">{cs}{data.countedTotal.toFixed(2)}</span>
+                <div className="flex justify-between items-center text-sm font-bold text-gray-900 uppercase tracking-widest">
+                    <span>Physical Quantum Count</span>
+                    <span className="tabular-nums">{cs}{data.countedTotal.toFixed(2)}</span>
                 </div>
-                <div className="pt-3 border-t border-slate-200 flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-slate-400">Variance Audit</span>
-                    <span className={`text-xl font-black tabular-nums ${data.difference === 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                <div className="p-10 bg-gray-900 text-white rounded-sm shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] mb-4 text-center">Consolidated Variance Audit</p>
+                    <p className={`text-6xl font-black text-center tabular-nums tracking-tighter ${data.difference === 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {data.difference > 0 ? '+' : ''}{cs}{data.difference.toFixed(2)}
-                    </span>
+                    </p>
                 </div>
             </div>
 
             {data.notes && (
-                <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Internal Notes</p>
-                    <p className="text-sm text-slate-600 p-4 bg-slate-50 rounded-xl border border-slate-100 italic">"{data.notes}"</p>
+                <div className="pt-10 border-t border-gray-100">
+                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] mb-4">Audit Rationale</p>
+                    <p className="text-sm text-gray-600 leading-relaxed italic border-l-4 border-gray-900 pl-6">"{data.notes}"</p>
                 </div>
             )}
         </div>
     );
 
     const renderGoodsCosting = (data: GoodsCosting) => (
-        <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-6">
-                <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Product Identity</p>
-                    <p className="font-bold text-slate-900">{data.productName || 'Unnamed'}</p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase">ID: {data.productNumber}</p>
+        <div className="space-y-10">
+            <div className="p-8 bg-gray-50 border-2 border-gray-900 rounded-sm">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] mb-2 text-center">Unit Identification Protocol</p>
+                <h3 className="text-2xl font-black text-gray-950 text-center uppercase tracking-tighter leading-none">{data.productName || 'Unnamed Asset'}</h3>
+                <p className="text-center text-[11px] font-bold text-gray-400 uppercase mt-2 tracking-[0.2em]">SKU: {data.productNumber}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-10">
+                <div className="space-y-4">
+                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] border-b border-gray-100 pb-2">Acquisition Logistics</p>
+                    <div className="flex justify-between text-xs font-bold text-gray-600"><span className="uppercase">Batch Quantum</span><span className="tabular-nums">{data.quantity} Units</span></div>
+                    <div className="flex justify-between text-xs font-bold text-gray-600"><span className="uppercase">Unit Value (Acq)</span><span className="tabular-nums">{cs}{data.buyingUnitPrice.toFixed(2)}</span></div>
                 </div>
-                <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Batch Size</p>
-                    <p className="font-bold text-slate-900">{data.quantity} Units</p>
+                <div className="space-y-4">
+                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] border-b border-gray-100 pb-2">Landed Surcharges</p>
+                    <div className="flex justify-between text-xs font-bold text-rose-500"><span className="uppercase">Aggregate Tax</span><span className="tabular-nums">{cs}{data.additionalCosts.taxes.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-xs font-bold text-rose-500"><span className="uppercase">Sea/Inland Freight</span><span className="tabular-nums">{cs}{data.additionalCosts.shipping.toFixed(2)}</span></div>
                 </div>
             </div>
 
-            <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Buying Unit Price</span>
-                    <span className="font-bold">{cs}{data.buyingUnitPrice.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Base Buying Sum</span>
-                    <span className="font-bold">{cs}{data.totalBuyingAmount.toFixed(2)}</span>
-                </div>
-                <div className="pt-2 border-t border-slate-100 space-y-1">
-                    <div className="flex justify-between text-xs text-slate-400 uppercase font-bold">
-                        <span>Landed Surcharges</span>
-                        <span>{cs}{data.totalAdditionalCosts.toFixed(2)}</span>
-                    </div>
-                    <div className="pl-4 space-y-1 text-[10px] text-slate-500">
-                        <div className="flex justify-between"><span>Taxes/Duties</span><span>{cs}{data.additionalCosts.taxes.toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span>Shipping/Logistics</span><span>{cs}{data.additionalCosts.shipping.toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span>Inland Transport</span><span>{cs}{data.additionalCosts.transport.toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span>Labor/Handling</span><span>{cs}{data.additionalCosts.labor.toFixed(2)}</span></div>
-                        <div className="flex justify-between"><span>Other/Fees</span><span>{cs}{(data.additionalCosts.transferFees + data.additionalCosts.other).toFixed(2)}</span></div>
-                    </div>
-                </div>
-                <div className="pt-4 border-t border-slate-200">
-                    <div className="flex justify-between items-center bg-slate-900 text-white p-6 rounded-2xl shadow-xl">
-                        <div>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Total Landed Cost</p>
-                            <p className="text-3xl font-bold tracking-tighter">{cs}{data.totalLandedCost.toFixed(2)}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-rose-400">Unit Cost</p>
-                            <p className="text-2xl font-black text-rose-500">{cs}{data.unitCost.toFixed(2)}</p>
-                        </div>
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 p-4 border border-slate-100 rounded-2xl">
+            <div className="pt-8 border-t-2 border-gray-950">
+                 <div className="flex justify-between items-center bg-gray-950 text-white p-10 rounded-sm shadow-xl">
                     <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Margin Applied</p>
-                        <p className="text-lg font-bold text-slate-900">{data.marginPercentage}%</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-500 mb-2">Final Unit Cost (Landed)</p>
+                        <p className="text-5xl font-black tracking-tighter text-rose-400 tabular-nums">{cs}{data.unitCost.toFixed(2)}</p>
                     </div>
                     <div className="text-right">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Market Value</p>
-                        <p className="text-lg font-bold text-primary">{cs}{data.suggestedSellingPrice.toFixed(2)}</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-500 mb-2">Market Yield Multiplier</p>
+                        <p className="text-3xl font-black text-white tabular-nums">+{data.marginPercentage}%</p>
                     </div>
-                </div>
+                 </div>
+            </div>
+
+            <div className="text-center pt-8 border-t border-dashed border-gray-200">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-300 mb-3">Authorized Market Value</p>
+                <p className="text-4xl font-black text-primary tracking-tighter tabular-nums">{cs}{data.suggestedSellingPrice.toFixed(2)}</p>
             </div>
         </div>
     );
 
     const renderGoodsReceiving = (data: GoodsReceiving) => (
-        <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-6">
+        <div className="space-y-10">
+            <div className="flex justify-between items-end border-b-2 border-gray-900 pb-8">
                 <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Reference Number</p>
-                    <p className="font-bold text-slate-900">{data.refNumber}</p>
+                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] mb-2">Document Reference</p>
+                    <p className="text-2xl font-black text-gray-950 tracking-tighter">{data.refNumber}</p>
                 </div>
-                <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Result</p>
-                    <p className={`font-bold uppercase ${data.status === 'accepted' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                <div className="text-right">
+                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] mb-2">Audit Outcome</p>
+                    <span className={`text-sm font-black uppercase tracking-widest px-4 py-1.5 border-2 ${data.status === 'accepted' ? 'border-emerald-600 text-emerald-600' : 'border-rose-600 text-rose-600'}`}>
                         {data.status.toUpperCase()}
-                    </p>
+                    </span>
                 </div>
             </div>
 
-            <div className="space-y-4">
-                <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Unit Identity</p>
-                    <p className="text-lg font-black text-slate-900 uppercase tracking-tighter">{data.productName}</p>
-                    <p className="text-xs font-bold text-slate-400 uppercase mt-1">ID: {data.productNumber}</p>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4 text-center">
-                    <div className="p-4 rounded-2xl bg-white border border-slate-100">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Expected</p>
-                        <p className="text-xl font-bold">{data.expectedQty}</p>
+            <div className="space-y-8">
+                <div className="grid grid-cols-3 gap-6">
+                    <div className="bg-gray-50 p-6 rounded-sm text-center">
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Manifest Expected</p>
+                        <p className="text-3xl font-black tabular-nums">{data.expectedQty}</p>
                     </div>
-                    <div className="p-4 rounded-2xl bg-white border border-slate-100">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Received</p>
-                        <p className="text-xl font-black text-primary">{data.receivedQty}</p>
+                    <div className="bg-gray-900 text-white p-6 rounded-sm text-center">
+                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2">Authorized Recv</p>
+                        <p className="text-3xl font-black tabular-nums text-primary">{data.receivedQty}</p>
                     </div>
-                    <div className="p-4 rounded-2xl bg-white border border-slate-100">
-                        <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">Variance</p>
-                        <p className={`text-xl font-black ${data.difference === 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                            {data.difference > 0 ? '+' : ''}{data.difference}
-                        </p>
+                    <div className={`p-6 rounded-sm text-center border-2 ${data.difference === 0 ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-rose-50 border-rose-100 text-rose-600'}`}>
+                        <p className="text-[9px] font-black uppercase tracking-widest mb-2">Net Variance</p>
+                        <p className="text-3xl font-black tabular-nums">{data.difference > 0 ? '+' : ''}{data.difference}</p>
                     </div>
                 </div>
 
-                {data.notes && (
-                    <div className="p-6 bg-slate-50 rounded-2xl italic text-sm text-slate-600 border border-slate-100">
-                        "{data.notes}"
-                    </div>
-                )}
+                <div className="pt-10">
+                    <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] mb-4">Arrival Notes</p>
+                    <p className="text-sm text-gray-600 leading-relaxed italic bg-gray-50 p-6 rounded-sm ring-1 ring-gray-100">"{data.notes || 'Manifest aligned with physical quantum count. No discrepancies recorded.'}"</p>
+                </div>
             </div>
         </div>
     );
 
     const renderInventoryAudit = (data: WeeklyInventoryCheck) => (
-        <div className="space-y-6">
-             <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-6">
-                <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Audit Date</p>
-                    <p className="font-bold text-slate-900">{data.date}</p>
-                </div>
-                <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Protocol Result</p>
-                    <p className={`font-bold uppercase ${data.status === 'accepted' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {data.status.toUpperCase()}
-                    </p>
-                </div>
-            </div>
-
+        <div className="space-y-10">
+            <p className="text-[11px] font-black text-gray-950 uppercase tracking-[0.4em] text-center mb-10 pb-6 border-b border-gray-100">Quantum Physical Verification Audit</p>
+            
             <div className="space-y-4">
                 {data.items.map((item, i) => (
-                    <div key={i} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                         <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">{item.productNumber}</p>
-                                <p className="font-bold text-slate-900 uppercase text-xs">{item.productName}</p>
-                            </div>
-                            <div className={`text-xs font-black tabular-nums ${item.difference === 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                Var: {item.difference > 0 ? '+' : ''}{item.difference}
+                    <div key={i} className="p-8 bg-gray-50 rounded-sm border-l-8 border-gray-950 flex justify-between items-center group transition-colors hover:bg-gray-100">
+                         <div className="min-w-0 pr-10">
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">{item.productNumber}</p>
+                            <h4 className="text-base font-black text-gray-950 uppercase tracking-tight leading-tight truncate">{item.productName}</h4>
+                            {item.notes && <p className="text-[10px] text-gray-500 italic mt-3 leading-relaxed">Audit Memo: "{item.notes}"</p>}
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                            <div className="flex items-center gap-6">
+                                <div className="text-center">
+                                    <p className="text-[8px] font-black text-gray-300 uppercase mb-1">System</p>
+                                    <p className="text-lg font-black tabular-nums">{item.systemQty}</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-[8px] font-black text-gray-300 uppercase mb-1">Physical</p>
+                                    <p className="text-lg font-black tabular-nums text-primary">{item.physicalQty}</p>
+                                </div>
+                                <div className="text-center min-w-[60px]">
+                                    <p className="text-[8px] font-black text-gray-300 uppercase mb-1">Shift</p>
+                                    <p className={`text-xl font-black tabular-nums ${item.difference === 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                        {item.difference > 0 ? '+' : ''}{item.difference}
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 text-[9px] font-bold uppercase tracking-widest">
-                            <div className="text-slate-400">System Qty: <span className="text-slate-900">{item.systemQty}</span></div>
-                            <div className="text-slate-400">Physical: <span className="text-slate-900">{item.physicalQty}</span></div>
-                        </div>
-                        {item.notes && <p className="text-[9px] text-slate-500 italic mt-1">Note: "{item.notes}"</p>}
                     </div>
                 ))}
             </div>
@@ -220,66 +190,78 @@ const FinanceReportModal: React.FC<FinanceReportModalProps> = ({ isOpen, onClose
     );
 
     const auditTrail = [
-        { label: 'First Signer', name: (record as any).signatures?.first?.userName || (record as any).signatures?.manager?.userName, role: (record as any).signatures?.first?.role || (record as any).signatures?.manager?.role, time: (record as any).signatures?.first?.timestamp || (record as any).signatures?.manager?.timestamp },
-        { label: 'Second Signer', name: (record as any).signatures?.second?.userName || (record as any).signatures?.verifier?.userName, role: (record as any).signatures?.second?.role || (record as any).signatures?.verifier?.role, time: (record as any).signatures?.second?.timestamp || (record as any).signatures?.verifier?.timestamp },
-        { label: 'Final Approver', name: (record as any).ownerAudit?.userName || (record as any).signatures?.approver?.userName, role: 'Owner/Admin', time: (record as any).ownerAudit?.timestamp || (record as any).signatures?.approver?.timestamp }
+        { label: 'Initialization Signer', name: (record as any).signatures?.first?.userName || (record as any).signatures?.manager?.userName, time: (record as any).signatures?.first?.timestamp || (record as any).signatures?.manager?.timestamp },
+        { label: 'Verification Signer', name: (record as any).signatures?.second?.userName || (record as any).signatures?.verifier?.userName, time: (record as any).signatures?.second?.timestamp || (record as any).signatures?.verifier?.timestamp },
+        { label: 'Audit Authorization', name: (record as any).ownerAudit?.userName || (record as any).signatures?.approver?.userName, time: (record as any).ownerAudit?.timestamp || (record as any).signatures?.approver?.timestamp }
     ].filter(a => a.name);
 
-    return ReactDOM.createPortal(
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[120] p-4 font-sans printable-area" role="dialog">
-            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
-                <header className="p-4 border-b flex justify-between items-center flex-shrink-0 no-print">
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => window.print()} className="p-3 rounded-2xl text-slate-600 hover:bg-slate-50 transition-colors"><PrintIcon /></button>
-                        <button onClick={handleDownload} className="p-3 rounded-2xl text-slate-600 hover:bg-slate-50 transition-colors"><DownloadJpgIcon /></button>
+    const footer = (
+        <>
+            <button onClick={onClose} className="btn-base btn-primary flex-1 py-5 text-[11px] font-black uppercase tracking-widest shadow-xl">Exit Audit View</button>
+            <button onClick={() => window.print()} className="btn-base btn-secondary px-8 py-5 text-[11px] font-black uppercase tracking-widest flex items-center gap-3"><PrintIcon className="w-4 h-4" /> Print Document</button>
+            <button onClick={handleDownload} className="btn-base btn-secondary px-8 py-5 text-[11px] font-black uppercase tracking-widest flex items-center gap-3"><DownloadJpgIcon className="w-4 h-4" /> Save Export</button>
+        </>
+    );
+
+    return (
+        <ModalShell 
+            isOpen={isOpen} 
+            onClose={onClose} 
+            title="Accounting Certificate" 
+            description="Official Ledger Extract"
+            maxWidth="max-w-2xl"
+            footer={footer}
+        >
+            <div className="bg-gray-100 p-3 sm:p-8 rounded-[2rem] border border-gray-200">
+                <div ref={reportRef} className="bg-white shadow-2xl py-16 px-8 sm:px-14 border border-gray-100 rounded-sm mx-auto relative overflow-hidden font-sans ring-[12px] ring-white">
+                    {/* Security Overlay */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-[0.03] rotate-[-45deg] select-none">
+                        <p className="text-[120px] font-black text-gray-900 uppercase">OFFICIAL</p>
                     </div>
-                    <button onClick={onClose} className="p-3 rounded-2xl text-slate-400 hover:bg-slate-50 transition-colors"><CloseIcon /></button>
-                </header>
 
-                <div className="overflow-y-auto bg-slate-50/50 p-8 custom-scrollbar">
-                    <div ref={reportRef} className="bg-white shadow-2xl py-12 px-10 border border-slate-100 rounded-[2rem] mx-auto max-w-[380px] relative overflow-hidden font-sans">
-                        <div className="text-center mb-10 relative">
-                            <h2 className="text-2xl font-bold uppercase tracking-tighter text-slate-900">{receiptSettings.businessName}</h2>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-0.4em mt-2">
-                                {type === 'cash' ? 'Cash Count Report' : type === 'costing' ? 'Landed Cost Audit' : type === 'receiving' ? 'Inventory Arrival Audit' : 'Weekly Stock Audit'}
+                    <div className="text-center mb-16 relative">
+                        <h2 className="text-3xl font-black uppercase tracking-tighter text-gray-950">{receiptSettings.businessName}</h2>
+                        <div className="flex items-center justify-center gap-3 mt-4">
+                            <div className="h-[2px] w-12 bg-gray-950"></div>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.5em]">
+                                {type === 'cash' ? 'Cash Audit Certificate' : type === 'costing' ? 'Landed Cost Analysis' : type === 'receiving' ? 'Manifest arrival audit' : 'Inventory Quantum Audit'}
                             </p>
-                            <p className="text-[8px] text-slate-300 font-bold uppercase tracking-widest mt-1">Ref ID: {record.id.toUpperCase()}</p>
+                            <div className="h-[2px] w-12 bg-gray-950"></div>
                         </div>
+                        <p className="text-[9px] text-gray-300 font-bold uppercase tracking-widest mt-3">Verified Log: {record.id.toUpperCase()}</p>
+                    </div>
 
-                        {type === 'cash' && renderCashCount(record as CashCount)}
-                        {type === 'costing' && renderGoodsCosting(record as GoodsCosting)}
-                        {type === 'receiving' && renderGoodsReceiving(record as GoodsReceiving)}
-                        {type === 'inventory_audit' && renderInventoryAudit(record as WeeklyInventoryCheck)}
+                    {type === 'cash' && renderCashCount(record as CashCount)}
+                    {type === 'costing' && renderGoodsCosting(record as GoodsCosting)}
+                    {type === 'receiving' && renderGoodsReceiving(record as GoodsReceiving)}
+                    {type === 'inventory_audit' && renderInventoryAudit(record as WeeklyInventoryCheck)}
 
-                        <div className="mt-12 pt-8 border-t border-dashed border-slate-200">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-6">Digital Audit Trail</p>
-                            <div className="space-y-4">
-                                {auditTrail.map((entry, i) => (
-                                    <div key={i} className="flex justify-between items-center text-[8px] font-bold border-b border-slate-50 pb-2 last:border-0">
-                                        <div className="flex flex-col">
-                                            <span className="text-slate-400 uppercase tracking-widest">{entry.label}</span>
-                                            <span className="text-slate-300">{new Date(entry.time!).toLocaleString()}</span>
-                                        </div>
-                                        <div className="text-right">
-                                            <span className="text-slate-900 uppercase">SIGN: {entry.name}</span>
-                                            <p className="text-[7px] text-slate-400">{entry.role}</p>
-                                        </div>
+                    <div className="mt-20 pt-10 border-t-2 border-gray-950">
+                        <p className="text-[10px] font-black text-gray-950 uppercase tracking-[0.3em] mb-10 text-center">Official Digital Signature Chain</p>
+                        <div className="space-y-6">
+                            {auditTrail.map((entry, i) => (
+                                <div key={i} className="flex justify-between items-center text-[10px] font-black border-b border-gray-50 pb-4 last:border-0">
+                                    <div className="flex flex-col">
+                                        <span className="text-gray-400 uppercase tracking-widest mb-1">{entry.label}</span>
+                                        <span className="text-gray-300 font-bold">{new Date(entry.time!).toLocaleString()}</span>
                                     </div>
-                                ))}
-                            </div>
+                                    <div className="text-right">
+                                        <div className="mb-1">
+                                            <span className="text-gray-950 uppercase ring-1 ring-gray-200 px-3 py-1 bg-gray-50">SIGNED: {entry.name}</span>
+                                        </div>
+                                        <p className="text-[8px] text-gray-300 uppercase tracking-widest">Authorized Identity verified</p>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
+                    </div>
 
-                        <div className="mt-12 text-center border-t border-slate-50 pt-6">
-                            <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.4em]">Official Terminal Record • {new Date().toLocaleDateString()}</p>
-                        </div>
+                    <div className="mt-20 text-center pt-10 border-t border-gray-100">
+                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.5em]">System Node Extract • Generated {new Date().toLocaleDateString()}</p>
                     </div>
                 </div>
-                <footer className="p-6 bg-white border-t no-print flex justify-center">
-                    <button onClick={onClose} className="px-10 py-3 bg-slate-900 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest shadow-xl transition-all">Close Report</button>
-                </footer>
             </div>
-        </div>,
-        modalRoot
+        </ModalShell>
     );
 };
 
