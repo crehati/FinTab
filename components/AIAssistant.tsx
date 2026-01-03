@@ -1,11 +1,12 @@
 
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { formatCurrency, getStoredItem } from '../lib/utils';
 import { AIIcon, CloseIcon, PlusIcon, WarningIcon } from '../constants';
-import type { User, Sale, Product, Expense, Customer, ExpenseRequest, CashCount, GoodsCosting, GoodsReceiving, AnomalyAlert, BusinessSettingsData, ReceiptSettingsData, AppPermissions } from '../types';
+import type { User, Sale, Product, Expense, Customer, ExpenseRequest, CashCount, GoodsCosting, GoodsReceiving, AnomalyAlert, BusinessSettingsData, ReceiptSettingsData, AppPermissions, AppNotification } from '../types';
 import { hasAccess } from '../lib/permissions';
+import { notify } from './Toast';
 
 interface AIAssistantProps {
     currentUser: User;
@@ -24,84 +25,166 @@ interface AIAssistantProps {
     t: (key: string) => string;
     receiptSettings: ReceiptSettingsData;
     permissions: AppPermissions;
+    setProducts: (products: Product[]) => void;
+    setSales: (sales: Sale[]) => void;
+    createNotification: (targetUserId: string, title: string, message: string, type: string, link: string) => void;
+    notifications: AppNotification[];
 }
 
 const AIAssistant: React.FC<AIAssistantProps> = ({
     currentUser, sales, products, expenses, customers, users,
     expenseRequests, cashCounts, goodsCosting, goodsReceiving,
     anomalyAlerts, businessSettings, lowStockThreshold, t,
-    receiptSettings, permissions
+    receiptSettings, permissions, setProducts, setSales, createNotification, notifications
 }) => {
-    const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
+    const [messages, setMessages] = useState<{ role: 'user' | 'model' | 'system', text: string, type?: 'anomaly' }[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isAuditing, setIsAuditing] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    const contextStr = useMemo(() => {
-        const safeSales = sales || [];
-        const safeProducts = products || [];
-        const safeExpenses = expenses || [];
-        const cs = receiptSettings?.currencySymbol || '$';
+    // SYSTEM TOOL DEFINITIONS (AGENTIC ACTIONS)
+    const tools = [
+        {
+            functionDeclarations: [
+                {
+                    name: 'adjust_stock',
+                    description: 'Adjust the stock levels for a specific product in the inventory.',
+                    parameters: {
+                        type: Type.OBJECT,
+                        properties: {
+                            productId: { type: Type.STRING, description: 'The unique identifier of the product.' },
+                            quantity: { type: Type.NUMBER, description: 'Number of units to add or remove (negative to remove).' },
+                            reason: { type: Type.STRING, description: 'The rationale for the adjustment.' }
+                        },
+                        required: ['productId', 'quantity', 'reason']
+                    }
+                },
+                {
+                    name: 'issue_notification',
+                    description: 'Send a high-priority system notification to a user or node.',
+                    parameters: {
+                        type: Type.OBJECT,
+                        properties: {
+                            targetUserId: { type: Type.STRING, description: 'The user ID to receive the alert.' },
+                            title: { type: Type.STRING },
+                            message: { type: Type.STRING },
+                            priority: { type: Type.STRING, enum: ['info', 'warning', 'error', 'success'] }
+                        },
+                        required: ['targetUserId', 'title', 'message', 'priority']
+                    }
+                }
+            ]
+        }
+    ];
 
-        let str = `[TERMINAL CONTEXT: ${receiptSettings?.businessName || 'Business Portal'}]\n`;
-        str += `- Operator: ${currentUser?.name} (${currentUser?.role})\n`;
+    const contextStr = useMemo(() => {
+        const cs = receiptSettings?.currencySymbol || '$';
+        let str = `[FINTAB OS CONTEXT: ${receiptSettings?.businessName || 'Business Portal'}]\n`;
         str += `- Active Personnel: ${users?.length || 0} units\n`;
         str += `- Customer Registry: ${customers?.length || 0} identities\n`;
-
-        const totalStock = safeProducts.reduce((s, p) => s + (p.stock || 0), 0);
-        const lowStockCount = safeProducts.filter(p => (p.stock || 0) <= lowStockThreshold).length;
-        str += `\n[INVENTORY STATUS]\n- SKU Count: ${safeProducts.length}\n- Total Units: ${totalStock}\n- Low Stock Alerts: ${lowStockCount}\n`;
-
-        const totalRev = safeSales.filter(s => s.status === 'completed').reduce((s, x) => s + x.total, 0);
-        str += `\n[SALES PERFORMANCE]\n- Total Lifetime Sales: ${safeSales.length}\n- Verified Revenue: ${cs}${totalRev.toFixed(2)}\n`;
-
-        const totalExp = safeExpenses.filter(e => e.status !== 'deleted').reduce((s, e) => s + e.amount, 0);
-        str += `\n[EXPENSE LEDGER]\n- Active Debits: ${safeExpenses.length}\n- Total Outflow: ${cs}${totalExp.toFixed(2)}\n`;
-
-        const netProfit = totalRev - totalExp;
-        str += `\n[FINANCIAL HEALTH]\n- Current Net Balance: ${cs}${netProfit.toFixed(2)}\n`;
-
-        const activeAlerts = anomalyAlerts?.filter(a => !a.isDismissed).length || 0;
-        str += `\n[SECURITY PROTOCOLS]\n- Unresolved Anomalies: ${activeAlerts}\n`;
-
-        if (hasAccess(currentUser, 'COMMISSIONS', 'view_all_commissions', permissions)) {
-            const totalComm = safeSales.reduce((s, sale) => s + (sale.commission || 0), 0);
-            str += `\n[COMMISSION DATA]\n- Total Staff Yield: ${cs}${totalComm.toFixed(2)}\n`;
-        }
-        
+        const totalRev = (sales || []).filter(s => s.status === 'completed').reduce((s, x) => s + x.total, 0);
+        str += `\n[FINANCIALS]\n- Revenue: ${cs}${totalRev.toFixed(2)}\n`;
+        str += `\n[INVENTORY SKUS]\n` + (products || []).slice(0, 10).map(p => `- ${p.name} (ID: ${p.id}): ${p.stock} units, Price: ${cs}${p.price}`).join('\n');
         return str;
-    }, [currentUser, sales, products, expenses, users, customers, anomalyAlerts, receiptSettings, permissions, lowStockThreshold]);
+    }, [sales, products, users, customers, receiptSettings]);
+
+    // ANOMALY SCAN (FEATURE #4)
+    useEffect(() => {
+        const runSecurityAudit = async () => {
+            if (isAuditing) return;
+            setIsAuditing(true);
+            
+            try {
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                const recentSales = (sales || []).slice(0, 50).map(s => ({ id: s.id, total: s.total, status: s.status, user: s.userId }));
+                const staffRates = (users || []).map(u => ({ id: u.id, name: u.name, role: u.role, type: u.type }));
+
+                const auditPrompt = `Perform a security audit on this POS operational data. Look for:
+                1. High refund/rejection patterns by specific staff members.
+                2. Unusual transaction values.
+                3. Operational discrepancies.
+                
+                Data:
+                Sales History: ${JSON.stringify(recentSales)}
+                Staff Roster: ${JSON.stringify(staffRates)}
+                
+                Return a concise summary of any anomalies found or state "Status: Nominal" if everything looks standard.`;
+
+                const response = await ai.models.generateContent({
+                    model: 'gemini-3-pro-preview',
+                    contents: auditPrompt,
+                    config: { systemInstruction: "You are the FinTab Security Audit Node. Be blunt, data-driven, and brief." }
+                });
+
+                if (response.text && !response.text.includes("Nominal")) {
+                    setMessages(prev => [{ role: 'system', text: `SECURITY ALERT: ${response.text}`, type: 'anomaly' }, ...prev]);
+                }
+            } catch (e) {
+                console.error("Audit Protocol Interrupted", e);
+            } finally {
+                setIsAuditing(false);
+            }
+        };
+
+        if (messages.length === 0) runSecurityAudit();
+    }, [sales, users]);
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
         
         const currentInput = input;
-        const newMessages = [...messages, { role: 'user' as const, text: currentInput }];
-        setMessages(newMessages);
+        setMessages(prev => [...prev, { role: 'user', text: currentInput }]);
         setInput('');
         setIsLoading(true);
 
         try {
-            // Initialize Core AI Instance using the required environment key
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             
-            // Simplified contents structure as required by @google/genai SDK for single turn
             const response = await ai.models.generateContent({
                 model: 'gemini-3-pro-preview',
-                contents: `Context:\n${contextStr}\n\nUser Question: ${currentInput}`,
+                contents: `Context:\n${contextStr}\n\nUser Action: ${currentInput}`,
                 config: {
-                    systemInstruction: "You are the FinTab Intelligence Agent. Help users analyze their business metrics and operational data. Be professional, data-driven, and concise. If sensitive profit data is requested, assume the operator has clearance."
+                    tools: tools,
+                    systemInstruction: "You are the FinTab Intelligence Agent. You can perform actions on inventory and issue alerts. When a user asks to change stock or notify someone, use your tools. Otherwise, analyze the provided context."
                 }
             });
 
-            if (response && response.text) {
+            // Handle Function Calls (FEATURE #3)
+            if (response.functionCalls) {
+                for (const fc of response.functionCalls) {
+                    if (fc.name === 'adjust_stock') {
+                        const { productId, quantity, reason } = fc.args;
+                        const product = products.find(p => p.id === productId);
+                        if (product) {
+                            const newStock = (product.stock || 0) + quantity;
+                            const updated = products.map(p => p.id === productId ? { 
+                                ...p, 
+                                stock: newStock,
+                                stockHistory: [{
+                                    date: new Date().toISOString(),
+                                    userId: currentUser.id,
+                                    type: quantity > 0 ? 'add' : 'remove',
+                                    quantity: Math.abs(quantity),
+                                    reason: `AI Action: ${reason}`,
+                                    newStockLevel: newStock
+                                }, ...(p.stockHistory || [])]
+                            } : p);
+                            setProducts(updated);
+                            setMessages(prev => [...prev, { role: 'model', text: `AUTHORIZED: Stock for ${product.name} updated to ${newStock} units. Reason: ${reason}` }]);
+                        }
+                    } else if (fc.name === 'issue_notification') {
+                        const { targetUserId, title, message, priority } = fc.args;
+                        createNotification(targetUserId, title, message, priority, '/dashboard');
+                        setMessages(prev => [...prev, { role: 'model', text: `PROTOCOL: Alert dispatched to target node ${targetUserId}.` }]);
+                    }
+                }
+            } else if (response.text) {
                 setMessages(prev => [...prev, { role: 'model', text: response.text }]);
-            } else {
-                throw new Error("Empty response from model.");
             }
         } catch (error) {
             console.error("AI Node Connection Failure:", error);
-            setMessages(prev => [...prev, { role: 'model', text: "Protocol Error: Intelligence node connection failed. Ensure your API Key is correctly set in the environment and that the model 'gemini-3-pro-preview' is accessible." }]);
+            setMessages(prev => [...prev, { role: 'model', text: "Protocol Error: Intelligence node connection failed. Verify authorization." }]);
         } finally {
             setIsLoading(false);
         }
@@ -118,13 +201,16 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                     <div className="bg-primary p-3 rounded-2xl text-white shadow-lg shadow-primary/20"><AIIcon className="w-6 h-6" /></div>
                     <div>
                         <h2 className="text-xl font-black uppercase tracking-tighter">AI Assistant</h2>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Intelligence Node Active</p>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className={`w-1.5 h-1.5 rounded-full ${isAuditing ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{isAuditing ? 'Auditing Ledger...' : 'Intelligence Node Active'}</p>
+                        </div>
                     </div>
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                {messages.length === 0 && (
+            <main className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-slate-50/30 dark:bg-gray-950/30">
+                {messages.length === 0 && !isAuditing && (
                     <div className="h-full flex flex-col items-center justify-center text-center opacity-30">
                         <AIIcon className="w-16 h-16 mb-4" />
                         <p className="text-sm font-black uppercase tracking-[0.4em]">Awaiting Instruction</p>
@@ -132,7 +218,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                 )}
                 {messages.map((m, i) => (
                     <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] p-4 rounded-3xl ${m.role === 'user' ? 'bg-primary text-white rounded-br-none' : 'bg-slate-100 dark:bg-gray-800 text-slate-900 dark:text-white rounded-bl-none shadow-sm'}`}>
+                        <div className={`max-w-[85%] p-4 rounded-3xl ${
+                            m.role === 'user' ? 'bg-primary text-white rounded-br-none shadow-lg' : 
+                            m.type === 'anomaly' ? 'bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-300 rounded-bl-none italic' :
+                            'bg-white dark:bg-gray-800 text-slate-900 dark:text-white rounded-bl-none shadow-sm border border-slate-100 dark:border-gray-700'
+                        }`}>
+                            {m.type === 'anomaly' && <WarningIcon className="w-4 h-4 mb-2" />}
                             <p className="text-sm font-medium leading-relaxed">{m.text}</p>
                         </div>
                     </div>
@@ -151,15 +242,15 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                 <div ref={scrollRef} />
             </main>
 
-            <footer className="p-6 border-t dark:border-gray-800 bg-slate-50/50 dark:bg-gray-800/50">
+            <footer className="p-6 border-t dark:border-gray-800 bg-white dark:bg-gray-900">
                 <div className="flex gap-4">
                     <input 
                         type="text" 
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder="Inquire about sales, inventory, or trends..."
-                        className="flex-1 bg-white dark:bg-gray-950 border-none rounded-2xl px-6 py-4 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-400 shadow-sm focus:ring-4 focus:ring-primary/10 transition-all outline-none caret-primary"
+                        placeholder="Try: 'Notify Owner about low stock' or 'Adjust stock for IPH-15P to 20 units'..."
+                        className="flex-1 bg-slate-50 dark:bg-gray-950 border-none rounded-2xl px-6 py-4 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-400 shadow-sm focus:ring-4 focus:ring-primary/10 transition-all outline-none caret-primary"
                     />
                     <button 
                         onClick={handleSend}

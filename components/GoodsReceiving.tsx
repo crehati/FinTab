@@ -1,13 +1,15 @@
 
 // @ts-nocheck
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { GoogleGenAI, Type } from "@google/genai";
 import type { GoodsReceiving, User, Product, ReceiptSettingsData, AppPermissions, CashCountSignature, BusinessSettingsData, BusinessProfile } from '../types';
 import Card from './Card';
 import EmptyState from './EmptyState';
 import FinanceReportModal from './FinanceReportModal';
 import ModalShell from './ModalShell';
-import { TruckIcon, PlusIcon, CloseIcon, WarningIcon, FilePdfIcon } from '../constants';
+import { TruckIcon, PlusIcon, CloseIcon, WarningIcon, FilePdfIcon, AIIcon } from '../constants';
 import { hasAccess } from '../lib/permissions';
+import { notify } from './Toast';
 
 interface GoodsReceivingProps {
     goodsReceivings: GoodsReceiving[];
@@ -29,6 +31,8 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
 }) => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [reportToShow, setReportToShow] = useState<GoodsReceiving | null>(null);
+    const [isAiProcessing, setIsAiProcessing] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const isOwnerOrAdmin = currentUser?.role === 'Owner' || currentUser?.role === 'Super Admin';
     const workflowRoles = businessSettings?.workflowRoles || {};
@@ -82,6 +86,72 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
         }
     };
 
+    // AI VISION LOGIC: Extracts data from invoice or label
+    const handleAiScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsAiProcessing(true);
+        notify("Intelligence Node Activated: Analyzing Invoice", "info");
+
+        try {
+            const reader = new FileReader();
+            const base64Promise = new Promise((resolve) => {
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.readAsDataURL(file);
+            });
+
+            const base64Data = await base64Promise;
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-pro-preview',
+                contents: {
+                    parts: [
+                        { inlineData: { data: base64Data, mimeType: file.type } },
+                        { text: "Extract shipping/receiving data from this image. Return JSON with fields: refNumber, productNumber (SKU), productName, quantity (integer). If a field is missing, use empty string. Focus on high precision for numbers." }
+                    ]
+                },
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: Type.OBJECT,
+                        properties: {
+                            refNumber: { type: Type.STRING },
+                            productNumber: { type: Type.STRING },
+                            productName: { type: Type.STRING },
+                            quantity: { type: Type.INTEGER }
+                        }
+                    }
+                }
+            });
+
+            const result = JSON.parse(response.text);
+            
+            // Link to existing product if SKU matches
+            const matchedProduct = products.find(p => p.sku === result.productNumber || p.id.slice(-8).toUpperCase() === result.productNumber);
+
+            setFormData(prev => ({
+                ...prev,
+                refNumber: result.refNumber || prev.refNumber,
+                productNumber: result.productNumber || prev.productNumber,
+                productName: matchedProduct ? matchedProduct.name : (result.productName || prev.productName),
+                receivedQty: result.quantity ? String(result.quantity) : prev.receivedQty,
+                expectedQty: result.quantity ? String(result.quantity) : prev.expectedQty,
+                linkedProductId: matchedProduct ? matchedProduct.id : prev.linkedProductId
+            }));
+
+            notify("Analysis Complete: Form populated.", "success");
+            if (!isAddModalOpen) setIsAddModalOpen(true);
+        } catch (err) {
+            console.error("AI Analysis Failed:", err);
+            notify("Scan Protocol Failure: Please enter data manually.", "error");
+        } finally {
+            setIsAiProcessing(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
     const handleCreateReceiving = () => {
         if (!canSubmitReceiving) {
             alert("Digital Protocol Error: Identity not authorized for 'Receiving Clerk' role.");
@@ -121,7 +191,6 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
         setIsAddModalOpen(false);
         setFormData({ refNumber: '', productNumber: '', productName: '', expectedQty: '', receivedQty: '', notes: '', linkedProductId: '' });
 
-        // Notify verifiers
         const verifiers = workflowRoles?.receivingVerifier?.map(a => a.userId) || [];
         (users || []).filter(u => u && u.id !== currentUser.id && (verifiers.includes(u.id) || u.role === 'Owner'))
             .forEach(u => createNotification(u.id, "Receiving Verification Required", `A shipment for ${newEntry.productName} requires dual sign-off.`, "action_required", "/goods-receiving"));
@@ -163,7 +232,6 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
             return e;
         }));
 
-        // Notify Approvers
         const approvers = workflowRoles?.receivingApprover?.map(a => a.userId) || [];
         (users || []).filter(u => u && (approvers.includes(u.id) || u.role === 'Owner')).forEach(o => 
             createNotification(o.id, "Shipment Ready for Acceptance", `Verified receiving record for ${entry.productName} is awaiting final audit.`, "info", "/goods-receiving")
@@ -224,13 +292,13 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
 
     const getStatusBadge = (status: string) => {
         const styles = {
-            draft: 'status-draft',
-            first_signed: 'status-pending animate-pulse',
-            second_signed: 'status-warning',
-            accepted: 'status-approved',
-            rejected: 'status-rejected'
+            draft: 'status-badge status-draft',
+            first_signed: 'status-badge status-pending animate-pulse',
+            second_signed: 'status-badge status-warning',
+            accepted: 'status-badge status-approved',
+            rejected: 'status-badge status-rejected'
         };
-        return <span className={`status-badge ${styles[status]}`}>{status.replace('_', ' ')}</span>;
+        return <span className={styles[status]}>{status.replace('_', ' ')}</span>;
     };
 
     const addModalFooter = (
@@ -253,18 +321,29 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
 
     return (
         <div className="space-y-8 font-sans pb-24 lg:pb-8">
-            <header className="flex justify-between items-end px-2">
+            <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 px-2">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 dark:text-white uppercase tracking-tighter">Goods Receiving</h1>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">3-Step Verification Protocol (Entry → Verify → Approve)</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Verification Protocol (Entry → Verify → Approve)</p>
                 </div>
-                <button
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="bg-primary text-white px-8 py-3 rounded-2xl font-bold uppercase tracking-widest text-[10px] shadow-xl shadow-primary/20 hover:opacity-90 active:scale-95 transition-all flex items-center gap-2"
-                >
-                    <PlusIcon className="w-4 h-4" />
-                    New Arrival
-                </button>
+                <div className="flex gap-4">
+                    <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleAiScan} capture="environment" />
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isAiProcessing}
+                        className="bg-slate-900 text-white px-8 py-3 rounded-2xl font-bold uppercase tracking-widest text-[10px] shadow-xl hover:bg-black transition-all flex items-center gap-3 active:scale-95 disabled:opacity-50"
+                    >
+                        {isAiProcessing ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <AIIcon className="w-5 h-5 text-primary" />}
+                        AI Invoice Scan
+                    </button>
+                    <button
+                        onClick={() => setIsAddModalOpen(true)}
+                        className="bg-primary text-white px-8 py-3 rounded-2xl font-bold uppercase tracking-widest text-[10px] shadow-xl shadow-primary/20 hover:opacity-90 active:scale-95 transition-all flex items-center gap-2"
+                    >
+                        <PlusIcon className="w-4 h-4" />
+                        Manual Log
+                    </button>
+                </div>
             </header>
 
             <Card title="Receiving Audit Ledger">
@@ -347,8 +426,8 @@ const GoodsReceivingPage: React.FC<GoodsReceivingProps> = ({
                         <EmptyState 
                             icon={<TruckIcon />} 
                             title="Ledger Clean" 
-                            description="No inventory arrival records found."
-                            action={{ label: "Log Arrival", onClick: () => setIsAddModalOpen(true) }}
+                            description="No inventory arrival records found. Use AI Scan to quickly process an invoice."
+                            action={{ label: "Manual Log Entry", onClick: () => setIsAddModalOpen(true) }}
                         />
                     )}
                 </div>
