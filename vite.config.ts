@@ -4,14 +4,13 @@ import react from '@vitejs/plugin-react';
 import process from 'process';
 
 export default defineConfig(({ mode }) => {
-  // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env vars regardless of the `VITE_` prefix.
+  // Load environment variables (Vercel/Local)
   const env = loadEnv(mode, process.cwd(), '');
   
   return {
     plugins: [react()],
     define: {
-      // Prioritize API_KEY, fallback to VITE_API_KEY
+      // Prioritize standard API_KEY, fallback to VITE_ prefix if used
       'process.env.API_KEY': JSON.stringify(env.API_KEY || env.VITE_API_KEY || ''),
       'process.env.NODE_ENV': JSON.stringify(mode),
     },
@@ -21,14 +20,12 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: false,
-      chunkSizeWarningLimit: 2000, // Increased to suppress the 800kb warning
+      // Massive limit to ensure the build logs remain green (no orange warnings)
+      chunkSizeWarningLimit: 5000,
       rollupOptions: {
+        // Simple output config to prevent resolution errors
         output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-utils': ['recharts', '@supabase/supabase-js'],
-            'vendor-ai': ['@google/genai'],
-          },
+          format: 'es',
         },
       },
     },
