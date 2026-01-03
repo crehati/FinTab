@@ -3,9 +3,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { formatCurrency, getStoredItem } from '../lib/utils';
-import { AIIcon, CloseIcon, PlusIcon, WarningIcon } from '../constants';
+import { AIIcon, CloseIcon, PlusIcon, WarningIcon, SearchIcon } from '../constants';
 import type { User, Sale, Product, Expense, Customer, ExpenseRequest, CashCount, GoodsCosting, GoodsReceiving, AnomalyAlert, BusinessSettingsData, ReceiptSettingsData, AppPermissions, AppNotification } from '../types';
-import { hasAccess } from '../lib/permissions';
 import { notify } from './Toast';
 
 interface AIAssistantProps {
@@ -37,44 +36,29 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     anomalyAlerts, businessSettings, lowStockThreshold, t,
     receiptSettings, permissions, setProducts, setSales, createNotification, notifications
 }) => {
-    const [messages, setMessages] = useState<{ role: 'user' | 'model' | 'system', text: string, type?: 'anomaly' | 'error' }[]>([]);
+    const [messages, setMessages] = useState<{ role: 'user' | 'model' | 'system', text: string, type?: 'anomaly' | 'error' | 'success' }[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isAuditing, setIsAuditing] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    // Get the baked-in API key from the build environment
     const API_KEY = process.env.API_KEY;
 
-    // SYSTEM TOOL DEFINITIONS
+    // Agentic Toolset for FinTab OS
     const tools = useMemo(() => [
         {
             functionDeclarations: [
                 {
                     name: 'adjust_stock',
-                    description: 'Modify the physical inventory quantity for a specific asset.',
+                    description: 'Directly modify inventory levels for a product.',
                     parameters: {
                         type: Type.OBJECT,
                         properties: {
-                            productId: { type: Type.STRING, description: 'The unique SKU or Product ID string.' },
-                            quantity: { type: Type.NUMBER, description: 'Integer value to adjust by (e.g., -5 for removal, 10 for addition).' },
-                            reason: { type: Type.STRING, description: 'The operational rationale for this adjustment.' }
+                            productId: { type: Type.STRING, description: 'The product ID or SKU.' },
+                            quantity: { type: Type.NUMBER, description: 'Amount to change (positive or negative).' },
+                            reason: { type: Type.STRING, description: 'Rationale for the manual shift.' }
                         },
                         required: ['productId', 'quantity', 'reason']
-                    }
-                },
-                {
-                    name: 'issue_notification',
-                    description: 'Dispatch a high-priority system alert to another node (user).',
-                    parameters: {
-                        type: Type.OBJECT,
-                        properties: {
-                            targetUserId: { type: Type.STRING, description: 'The user ID of the recipient node.' },
-                            title: { type: Type.STRING, description: 'Concise alert subject.' },
-                            message: { type: Type.STRING, description: 'Detailed alert instructions.' },
-                            priority: { type: Type.STRING, enum: ['info', 'warning', 'error', 'success'], description: 'Urgency tier.' }
-                        },
-                        required: ['targetUserId', 'title', 'message', 'priority']
                     }
                 }
             ]
@@ -84,68 +68,50 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     const contextStr = useMemo(() => {
         const cs = receiptSettings?.currencySymbol || '$';
         let str = `[FINTAB OS CONTEXT: ${receiptSettings?.businessName || 'Active Node'}]\n`;
-        str += `- Operator: ${currentUser.name} (Role: ${currentUser.role})\n`;
-        str += `- Staff Nodes: ${users?.length || 0}\n`;
-        const totalRev = (sales || []).filter(s => s.status === 'completed').reduce((s, x) => s + (x.total || 0), 0);
-        str += `\n[FINANCIAL TELEMETRY]\n- Lifetime Revenue: ${cs}${totalRev.toFixed(2)}\n`;
-        str += `\n[INVENTORY LEDGER (TOP 10 SKUS)]\n` + (products || []).slice(0, 10).map(p => 
-            `- ${p.name} [ID: ${p.id}]: Stock: ${p.stock}, Value: ${cs}${p.price}`
-        ).join('\n');
+        str += `- Operator: ${currentUser.name} (${currentUser.role})\n`;
+        str += `- Inventory Size: ${products?.length || 0} items\n`;
+        const rev = (sales || []).filter(s => s.status === 'completed').reduce((s, x) => s + (x.total || 0), 0);
+        str += `- Lifetime Revenue: ${cs}${rev.toFixed(2)}\n`;
+        str += `\n[LEDGER DATA]\n` + (products || []).slice(0, 10).map(p => `- ${p.name}: ${p.stock} units @ ${cs}${p.price}`).join('\n');
         return str;
-    }, [sales, products, users, receiptSettings, currentUser]);
+    }, [sales, products, receiptSettings, currentUser]);
 
+    // Cold Boot Sequence
     useEffect(() => {
-        const runSecurityAudit = async () => {
-            if (isAuditing || !API_KEY) return;
-            setIsAuditing(true);
-            try {
-                const ai = new GoogleGenAI({ apiKey: API_KEY });
-                const auditData = {
-                    recentSales: (sales || []).slice(0, 20).map(s => ({ id: s.id, total: s.total, status: s.status, staff: s.userId })),
-                    staffRoster: (users || []).map(u => ({ id: u.id, role: u.role }))
-                };
-                const response = await ai.models.generateContent({
-                    model: 'gemini-3-pro-preview',
-                    contents: `Audit this data for anomalies: ${JSON.stringify(auditData)}. Return one short sentence start with "SECURITY ALERT:" if risk found, else "Status: Nominal".`,
-                    config: { systemInstruction: "FinTab Security Audit Layer." }
-                });
-                if (response.text && !response.text.includes("Nominal")) {
-                    setMessages(prev => [{ role: 'system', text: response.text, type: 'anomaly' }, ...prev]);
-                }
-            } catch (e) {
-                console.error("Security Scan Fault:", e);
-            } finally {
-                setIsAuditing(false);
-            }
-        };
-        if (messages.length === 0 && API_KEY) runSecurityAudit();
-    }, [API_KEY, sales, users]);
+        if (messages.length === 0) {
+            setMessages([{ role: 'model', text: "Intelligence Node Initialized. Systems nominal. How can I assist with your terminal logic today?", type: 'success' }]);
+        }
+    }, []);
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
         
-        const currentInput = input;
-        setMessages(prev => [...prev, { role: 'user', text: currentInput }]);
+        const operatorInput = input;
+        setMessages(prev => [...prev, { role: 'user', text: operatorInput }]);
         setInput('');
+        setIsLoading(true);
 
-        if (!API_KEY) {
-            setMessages(prev => [...prev, { role: 'model', text: "Critical Fault: Intelligence Node Key missing. Please check Vercel environment settings.", type: 'error' }]);
+        if (!API_KEY || API_KEY.length < 5) {
+            setMessages(prev => [...prev, { 
+                role: 'model', 
+                text: "CRITICAL FAULT: API Key not detected in production environment. Verify Vercel secrets and rebuild node.", 
+                type: 'error' 
+            }]);
+            setIsLoading(false);
             return;
         }
-
-        setIsLoading(true);
 
         try {
             const ai = new GoogleGenAI({ apiKey: API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-3-pro-preview',
                 contents: [
-                    { text: `CONTEXT:\n${contextStr}` },
-                    { text: `INSTRUCTION: ${currentInput}` }
+                    { text: `OS CONTEXT:\n${contextStr}` },
+                    { text: `OPERATOR CMD: ${operatorInput}` }
                 ],
                 config: {
                     tools: tools,
-                    systemInstruction: "You are FinTab Intelligence. Act as an OS agent. Use tools for stock or notifications. Analyze data for queries."
+                    systemInstruction: "You are the FinTab POS Intelligence core. Be technical, efficient, and proactive. Use the adjust_stock tool if the operator asks to change inventory levels."
                 }
             });
 
@@ -153,38 +119,28 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                 for (const fc of response.functionCalls) {
                     if (fc.name === 'adjust_stock') {
                         const { productId, quantity, reason } = fc.args;
-                        const product = products.find(p => p.id === productId || p.sku === productId);
+                        const product = products.find(p => p.id === productId || p.sku === productId || p.name === productId);
                         if (product) {
-                            const newStock = (product.stock || 0) + quantity;
-                            const updated = products.map(p => (p.id === product.id) ? { 
-                                ...p, 
-                                stock: newStock,
-                                stockHistory: [{
-                                    date: new Date().toISOString(),
-                                    userId: currentUser.id,
-                                    type: quantity > 0 ? 'add' : 'remove',
-                                    quantity: Math.abs(quantity),
-                                    reason: `AI Override: ${reason}`,
-                                    newStockLevel: newStock
-                                }, ...(p.stockHistory || [])]
-                            } : p);
+                            const nextStock = (product.stock || 0) + quantity;
+                            const updated = products.map(p => p.id === product.id ? { ...p, stock: nextStock } : p);
                             setProducts(updated);
-                            setMessages(prev => [...prev, { role: 'model', text: `PROTOCOL SUCCESS: Adjusted ${product.name} to ${newStock} units.` }]);
-                            notify("Grid Synced", "success");
+                            setMessages(prev => [...prev, { role: 'model', text: `PROTOCOL SYNC: Authorized ${quantity} unit shift for "${product.name}". New Balance: ${nextStock}. Rationale: ${reason}.` }]);
+                            notify("Inventory logic updated by AI", "success");
+                        } else {
+                            setMessages(prev => [...prev, { role: 'model', text: `SYNC FAILURE: Identifer "${productId}" not found in current ledger.` }]);
                         }
-                    } else if (fc.name === 'issue_notification') {
-                        const { targetUserId, title, message, priority } = fc.args;
-                        createNotification(targetUserId, title, message, priority, '/dashboard');
-                        setMessages(prev => [...prev, { role: 'model', text: `PROTOCOL SUCCESS: Alert dispatched to ${targetUserId}.` }]);
-                        notify("Alert Transmitted", "info");
                     }
                 }
             } else if (response.text) {
                 setMessages(prev => [...prev, { role: 'model', text: response.text }]);
             }
         } catch (error) {
-            console.error("AI Communication Failure:", error);
-            setMessages(prev => [...prev, { role: 'model', text: "Connectivity Error: Intelligence node handshake failed.", type: 'error' }]);
+            console.error("AI Node Breach:", error);
+            setMessages(prev => [...prev, { 
+                role: 'model', 
+                text: `Protocol Error: Intelligence node connection failed. Ensure your API Key is correctly set in the environment and that the model 'gemini-3-pro-preview' is accessible.`, 
+                type: 'error' 
+            }]);
         } finally {
             setIsLoading(false);
         }
@@ -195,78 +151,88 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     }, [messages, isLoading]);
 
     return (
-        <div className="flex flex-col h-[calc(100vh-14rem)] bg-white dark:bg-gray-950 rounded-[2.5rem] shadow-2xl border border-slate-100 dark:border-gray-800 overflow-hidden font-sans relative">
-            <header className="px-8 py-6 border-b dark:border-gray-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur-xl flex items-center justify-between z-20">
-                <div className="flex items-center gap-5">
-                    <div className="bg-primary p-3.5 rounded-2xl text-white shadow-lg shadow-primary/20">
-                        <AIIcon className="w-6 h-6" />
+        <div className="flex flex-col h-[calc(100vh-14rem)] bg-slate-50 dark:bg-gray-950 rounded-[3rem] shadow-2xl border border-slate-200 dark:border-gray-800 overflow-hidden font-sans relative">
+            {/* Telemetry Header */}
+            <header className="px-10 py-8 border-b dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl flex items-center justify-between z-20">
+                <div className="flex items-center gap-6">
+                    <div className="bg-slate-900 p-4 rounded-[1.5rem] text-primary shadow-2xl relative">
+                        <AIIcon className="w-8 h-8" />
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 border-4 border-white dark:border-gray-900 rounded-full animate-pulse"></div>
                     </div>
                     <div>
-                        <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900 dark:text-white">FinTab Intelligence</h2>
-                        <div className="flex items-center gap-2 mt-1.5">
-                            <span className={`w-1.5 h-1.5 rounded-full ${isAuditing || isLoading ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></span>
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                {isAuditing ? 'Auditing Ledger...' : isLoading ? 'Processing...' : 'Online & Active'}
-                            </p>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 dark:text-white">OS Intelligence Node</h2>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Protocol Version: 3.1.Pro-Vercel</span>
                         </div>
                     </div>
                 </div>
+                <div className="hidden md:flex items-center gap-4 bg-slate-50 dark:bg-gray-800 px-6 py-2 rounded-full border dark:border-gray-700">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Status:</p>
+                    <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Active & Synced</span>
+                </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar bg-slate-50/10 dark:bg-gray-950/10 relative z-10">
-                {messages.length === 0 && !isAuditing && (
-                    <div className="h-full flex flex-col items-center justify-center text-center opacity-30 select-none">
-                        <AIIcon className="w-20 h-20 mb-6 text-slate-200 dark:text-gray-800" />
-                        <p className="text-xs font-black uppercase tracking-[0.5em] text-slate-400">Awaiting Operator Instructions</p>
-                    </div>
-                )}
+            {/* Content Stream */}
+            <main className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar relative z-10">
                 {messages.map((m, i) => (
                     <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}>
-                        <div className={`max-w-[85%] p-5 rounded-[2rem] shadow-sm ${
+                        <div className={`max-w-[85%] p-6 rounded-[2.5rem] shadow-sm ${
                             m.role === 'user' 
-                                ? 'bg-primary text-white rounded-br-none shadow-xl shadow-primary/10' 
-                                : m.type === 'anomaly' 
-                                    ? 'bg-rose-50 dark:bg-rose-950/20 border-2 border-rose-100 dark:border-rose-900/30 text-rose-700 dark:text-rose-300 rounded-bl-none italic' 
-                                    : m.type === 'error'
-                                        ? 'bg-rose-600 text-white rounded-bl-none shadow-lg'
-                                        : 'bg-white dark:bg-gray-900 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-100 dark:border-gray-800 shadow-xl'
+                                ? 'bg-primary text-white rounded-br-none shadow-xl shadow-primary/20' 
+                                : m.type === 'error'
+                                    ? 'bg-rose-50 dark:bg-rose-950/30 border-2 border-rose-100 dark:border-rose-900/30 text-rose-700 dark:text-rose-400 rounded-bl-none'
+                                    : m.type === 'success'
+                                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-100 dark:border-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-bl-none'
+                                        : 'bg-white dark:bg-gray-900 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-200 dark:border-gray-800 shadow-xl'
                         }`}>
                             <div className="flex items-start gap-4">
-                                {m.type === 'anomaly' && <WarningIcon className="w-5 h-5 mt-0.5 flex-shrink-0" />}
-                                <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">{m.text}</p>
+                                {m.role === 'model' && <AIIcon className="w-5 h-5 mt-1 flex-shrink-0 opacity-40" />}
+                                <p className="text-sm font-bold leading-relaxed whitespace-pre-wrap tracking-tight uppercase">{m.text}</p>
                             </div>
                         </div>
                     </div>
                 ))}
+                
                 {isLoading && (
                     <div className="flex justify-start animate-fade-in">
-                        <div className="bg-white dark:bg-gray-900 p-6 rounded-[2rem] rounded-bl-none border border-slate-100 dark:border-gray-800 shadow-xl flex gap-2">
-                            <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                            <div className="w-2 h-2 bg-primary rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                        <div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] rounded-bl-none border border-slate-200 dark:border-gray-800 shadow-xl">
+                            <div className="flex gap-2">
+                                <div className="w-2.5 h-2.5 bg-primary rounded-full animate-bounce"></div>
+                                <div className="w-2.5 h-2.5 bg-primary rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                                <div className="w-2.5 h-2.5 bg-primary rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                            </div>
                         </div>
                     </div>
                 )}
-                <div ref={scrollRef} className="h-1" />
+                <div ref={scrollRef} className="h-4" />
             </main>
 
-            <footer className="p-8 border-t dark:border-gray-800 bg-white dark:bg-gray-950 z-20">
+            {/* Operator Input */}
+            <footer className="p-10 border-t dark:border-gray-800 bg-white dark:bg-gray-950 z-20">
                 <div className="flex gap-4">
-                    <input 
-                        type="text" 
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder="Instruct the system intelligence..."
-                        className="flex-1 bg-slate-50 dark:bg-gray-900 border-none rounded-3xl px-8 py-5 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-400 shadow-inner focus:ring-4 focus:ring-primary/10 transition-all outline-none caret-primary"
-                    />
+                    <div className="relative flex-1 group">
+                        <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
+                            <SearchIcon className="w-5 h-5 text-slate-300 group-focus-within:text-primary transition-colors" />
+                        </div>
+                        <input 
+                            type="text" 
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                            placeholder="Inquire about sales, inventory, or trends..."
+                            className="w-full bg-slate-50 dark:bg-gray-900 border-2 border-transparent focus:border-primary/20 rounded-3xl pl-16 pr-8 py-5 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-400 shadow-inner transition-all outline-none"
+                        />
+                    </div>
                     <button 
                         onClick={handleSend}
                         disabled={isLoading || !input.trim()}
-                        className="bg-slate-900 dark:bg-primary text-white px-10 rounded-3xl font-black uppercase text-[10px] tracking-[0.2em] shadow-2xl shadow-primary/20 hover:opacity-90 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale flex-shrink-0"
+                        className="bg-primary text-white px-12 rounded-3xl font-black uppercase text-[11px] tracking-[0.3em] shadow-2xl shadow-primary/30 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale flex-shrink-0"
                     >
-                        Execute
+                        {isLoading ? 'Syncing...' : 'Send'}
                     </button>
+                </div>
+                <div className="mt-4 text-center">
+                    <p className="text-[8px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-[0.5em]">Authorized Data Extraction Node • Gemini 3.0 Engine</p>
                 </div>
             </footer>
         </div>
