@@ -82,23 +82,26 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         setIsLoading(true);
 
         try {
-            // Strictly using process.env.API_KEY as per GenAI instructions
+            // Initialize Core AI Instance using the required environment key
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             
+            // Simplified contents structure as required by @google/genai SDK for single turn
             const response = await ai.models.generateContent({
                 model: 'gemini-3-pro-preview',
-                contents: [{ role: 'user', parts: [{ text: `Context:\n${contextStr}\n\nUser Question: ${currentInput}` }] }],
+                contents: `Context:\n${contextStr}\n\nUser Question: ${currentInput}`,
                 config: {
                     systemInstruction: "You are the FinTab Intelligence Agent. Help users analyze their business metrics and operational data. Be professional, data-driven, and concise. If sensitive profit data is requested, assume the operator has clearance."
                 }
             });
 
-            if (response.text) {
+            if (response && response.text) {
                 setMessages(prev => [...prev, { role: 'model', text: response.text }]);
+            } else {
+                throw new Error("Empty response from model.");
             }
         } catch (error) {
-            console.error("AI Node Error:", error);
-            setMessages(prev => [...prev, { role: 'model', text: "Protocol Error: Intelligence node connection failed. Ensure your API Key is correctly set in the environment and try again." }]);
+            console.error("AI Node Connection Failure:", error);
+            setMessages(prev => [...prev, { role: 'model', text: "Protocol Error: Intelligence node connection failed. Ensure your API Key is correctly set in the environment and that the model 'gemini-3-pro-preview' is accessible." }]);
         } finally {
             setIsLoading(false);
         }

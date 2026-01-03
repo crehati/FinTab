@@ -37,6 +37,7 @@ import Items from './components/Items';
 import Counter from './components/Counter';
 import Proforma from './components/Proforma';
 import Commission from './components/Commission';
+import InvestorPage from './components/Investor';
 import Expenses from './components/Expenses';
 import ExpenseRequestPage from './components/ExpenseRequestPage';
 import MyProfile from './components/MyProfile';
@@ -426,7 +427,7 @@ const App = () => {
             )}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
                 {currentUser && activeBusinessId && (
-                    <Header currentUser={currentUser} businessProfile={businessProfile} systemLogo={systemLogo} onMenuClick={() => setIsSidebarOpen(true)} notifications={notifications} cartCount={cart.reduce((s, i) => s + i.quantity, 0)} onMarkAsRead={(id) => { const updated = notifications.map(n => n.id === id ? { ...n, isRead: true } : n); handleUpdateNotifications(updated); }} onMarkAllAsRead={() => { const updated = notifications.map(n => ({ ...n, isRead: true })); handleUpdateNotifications(updated); }} onClear={(id) => { const updated = notifications.filter(n => n.id !== id); handleUpdateNotifications(updated); }} />
+                    <Header currentUser={currentUser} businessProfile={businessProfile} systemLogo={systemLogo} onMenuClick={() => setIsSidebarOpen(true)} notifications={notifications} cartCount={cart.reduce((s, i) => s + i.quantity, 0)} onMarkAsRead={(id) => { const updated = notifications.map(n => n.id === id ? { ...n, isRead: true } : n); handleUpdateNotifications(updated); }} onMarkAllAsRead={() => { const updated = notifications.map(n => ({ ...n, isRead: true })); handleUpdateNotifications(updated); }} onClear={(id) => { updated = notifications.filter(n => n.id !== id); handleUpdateNotifications(updated); }} />
                 )}
                 <main id="app-main-viewport" className={`flex-1 overflow-y-auto custom-scrollbar ${currentUser && activeBusinessId ? 'p-4 md:p-8 pb-32' : ''}`}>
                     <Routes>
@@ -464,7 +465,9 @@ const App = () => {
                         <Route path="/today" element={currentUser && activeBusinessId ? <Today {...{ sales, customers, expenses, products, t, receiptSettings }} /> : <Navigate to="/login" />} />
                         <Route path="/reports" element={currentUser && activeBusinessId ? <Reports {...{ sales, products, expenses, customers, users, t, receiptSettings, currentUser, permissions, ownerSettings }} /> : <Navigate to="/login" />} />
                         <Route path="/transactions" element={currentUser && activeBusinessId ? <Transactions {...{ sales, deposits, bankAccounts, users, receiptSettings, currentUser, onRequestDeposit: (amt, desc, bid) => { const d = { id: `dep-${Date.now()}`, date: new Date().toISOString(), amount: amt, description: desc, userId: currentUser.id, status: 'pending', bankAccountId: bid }; handleUpdateDeposits([d, ...deposits]); }, t }} /> : <Navigate to="/login" />} />
-                        
+                        <Route path="/commission" element={currentUser && activeBusinessId ? <Commission {...{ products, setProducts: handleUpdateProducts, t, receiptSettings }} /> : <Navigate to="/login" />} />
+                        <Route path="/investors" element={currentUser && activeBusinessId ? <InvestorPage {...{ users, sales, expenses, products, t, receiptSettings, currentUser, onSaveUser: (u, edit, id) => { const updated = edit ? users.map(old => old.id === id ? { ...old, ...u } : old) : [{ ...u, id: `u-${Date.now()}`, avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}` }, ...users]; handleUpdateUsers(updated); }, onDeleteUser: (id) => { const updated = users.filter(u => u.id !== id); handleUpdateUsers(updated); }, businessSettings, businessProfile, permissions }} /> : <Navigate to="/login" />} />
+
                         <Route path="/" element={<Navigate to={currentUser ? (activeBusinessId ? "/dashboard" : "/select-business") : "/login"} replace />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
