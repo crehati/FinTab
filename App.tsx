@@ -68,6 +68,25 @@ const ScrollToTop = () => {
     return null;
 };
 
+const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
+    useEffect(() => {
+        const timer = setTimeout(onComplete, 2600);
+        return () => clearTimeout(timer);
+    }, [onComplete]);
+
+    return (
+        <div className="fixed inset-0 bg-slate-950 z-[200] flex flex-col items-center justify-center animate-fade-in">
+            <div className="w-48 h-48 mb-12 animate-pulse transition-all">
+                <img src={FINTAB_LOGO_SVG} alt="FinTab Logo" className="w-full h-full object-contain filter brightness-110" />
+            </div>
+            <div className="w-56 h-1 bg-white/10 rounded-full overflow-hidden relative">
+                <div className="absolute inset-0 bg-primary animate-[loading-bar_2.6s_ease-in-out_forwards]" />
+            </div>
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.6em] mt-10 ml-[0.6em]">Authorized Node Booting...</p>
+        </div>
+    );
+};
+
 const Header = ({ currentUser, businessProfile, onMenuClick, notifications, cartCount, onMarkAsRead, onMarkAllAsRead, onClear, systemLogo }) => (
     <header className="h-16 flex items-center justify-between px-4 sm:px-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-slate-100 dark:border-gray-800 z-50 sticky top-0 flex-shrink-0">
         <div className="flex items-center gap-2 sm:gap-4 overflow-hidden">
@@ -80,7 +99,7 @@ const Header = ({ currentUser, businessProfile, onMenuClick, notifications, cart
                 </div>
                 <div className="hidden xs:block truncate">
                     <h1 className="text-sm sm:text-base font-black text-primary uppercase tracking-tight leading-none group-hover:text-blue-700 transition-colors truncate">{businessProfile?.businessName || 'FinTab'}</h1>
-                    <p className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1 opacity-80">Sync: Active</p>
+                    <p className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1 opacity-80">Node: Verified</p>
                 </div>
             </Link>
         </div>
@@ -90,7 +109,7 @@ const Header = ({ currentUser, businessProfile, onMenuClick, notifications, cart
                 <CounterIcon className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:-rotate-6" />
                 {cartCount > 0 && <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 bg-rose-500 text-white text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full border-2 border-white dark:border-gray-900">{cartCount}</span>}
             </Link>
-            <div className="h-6 w-px bg-slate-100 dark:bg-gray-800 mx-1"></div>
+            <div className="h-6 w-px bg-slate-100 dark:border-gray-800 mx-1"></div>
             <Link to="/profile" className="flex items-center gap-2 sm:gap-3 group transition-all">
                 <div className="relative flex-shrink-0">
                     <img src={currentUser?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.name || 'User')}`} className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover shadow-sm border-2 border-white dark:border-gray-800" />
@@ -114,7 +133,7 @@ export class ErrorBoundary extends React.Component<{ children?: React.ReactNode 
                 <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-950 p-6 font-sans">
                     <div className="max-w-md w-full bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-2xl p-10 text-center border border-rose-100 dark:border-rose-900/30">
                         <div className="w-20 h-20 bg-rose-50 dark:bg-rose-950/20 rounded-3xl flex items-center justify-center mx-auto mb-6 text-rose-500"><WarningIcon className="w-10 h-10" /></div>
-                        <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4">Core Protocol Failure</h2>
+                        <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4">Diagnostic Protocol Failure</h2>
                         <button onClick={() => { localStorage.clear(); window.location.href = '/'; }} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Emergency Node Reset</button>
                     </div>
                 </div>
@@ -124,23 +143,15 @@ export class ErrorBoundary extends React.Component<{ children?: React.ReactNode 
     }
 }
 
-const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
-    useEffect(() => { const timer = setTimeout(onComplete, 2000); return () => clearTimeout(timer); }, [onComplete]);
-    return (
-        <div className="fixed inset-0 bg-slate-950 z-[100] flex flex-col items-center justify-center">
-            <div className="w-32 h-32 mb-8 animate-pulse"><img src={FINTAB_LOGO_SVG} alt="FinTab" className="w-full h-full" /></div>
-            <div className="w-48 h-1 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-primary animate-[loading-bar_2s_ease-in-out_infinite]" style={{ width: '100%' }} /></div>
-            <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.5em] mt-8">Initializing Terminal Node...</p>
-        </div>
-    );
-};
-
 const App = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [isInitialized, setIsInitialized] = useState(false);
-    const [currentUser, setCurrentUser] = useState<User | null>(getStoredItem('fintab_simulator_session', null));
+    const [showIntro, setShowIntro] = useState(true);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [activeBusinessId, setActiveBusinessId] = useState<string | null>(localStorage.getItem('fintab_active_business_id'));
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
     
     // Identity-Locked States
     const [language, setLanguage] = useState(() => {
@@ -178,9 +189,10 @@ const App = () => {
 
     const systemLogo = getSystemLogo();
 
-    // HARD-LOCK SYNC ENGINE
+    // CLOUD SYNC ENGINE
     const persistData = async (key: string, data: any, silent = true) => {
         if (!activeBusinessId) return;
+        setSyncStatus('syncing');
         setStoredItemAndDispatchEvent(`fintab_${activeBusinessId}_${key}`, data);
         if (isSupabaseConfigured) {
             try {
@@ -190,20 +202,31 @@ const App = () => {
                     data: data,
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'business_id,key' });
-                if (error) console.error(`Sync Failure [${key}]:`, error.message);
-                else if (!silent) notify(`Node Synced: ${key}`, "success");
-            } catch (err) { console.error(`Sync Breach [${key}]:`, err); }
+                if (error) {
+                    console.error(`Sync Failure [${key}]:`, error.message);
+                    setSyncStatus('error');
+                } else {
+                    setSyncStatus('idle');
+                    if (!silent) notify(`Ledger Synced: ${key}`, "success");
+                }
+            } catch (err) { 
+                console.error(`Sync Breach [${key}]:`, err); 
+                setSyncStatus('error');
+            }
         }
     };
 
-    const fetchAllBusinessData = async (bid: string) => {
+    const fetchAllBusinessData = async (bid: string, sbUser: any) => {
         if (!isSupabaseConfigured || !bid) return;
         try {
             const { data, error } = await supabase.from('fintab_records').select('key, data').eq('business_id', bid);
             if (error) throw error;
             if (!data) return;
+            
+            const registry = {};
             data.forEach(record => {
                 const { key, data: val } = record;
+                registry[key] = val;
                 localStorage.setItem(`fintab_${bid}_${key}`, JSON.stringify(val));
                 switch(key) {
                     case 'profile': setBusinessProfile(val); break;
@@ -231,68 +254,103 @@ const App = () => {
                     case 'theme': setTheme(val); break;
                 }
             });
-        } catch (err) { console.error("Identity Recovery Failed:", err); }
+
+            const usersList = registry['users'] || [];
+            const foundUser = usersList.find(u => u.email === sbUser.email);
+            
+            const userObj: User = {
+                id: sbUser.id,
+                name: foundUser?.name || sbUser.user_metadata?.full_name || sbUser.email?.split('@')[0] || 'User',
+                email: sbUser.email!,
+                avatarUrl: foundUser?.avatarUrl || sbUser.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(sbUser.email!)}`,
+                role: foundUser?.role || 'Owner',
+                status: 'Active',
+                ...foundUser
+            };
+            
+            setCurrentUser(userObj);
+            setStoredItemAndDispatchEvent('fintab_simulator_session', userObj);
+
+            // Robust Welcome Message
+            const welcomeMsg = sessionStorage.getItem('fintab_welcome_message');
+            if (welcomeMsg) {
+                notify(welcomeMsg, "success");
+                sessionStorage.removeItem('fintab_welcome_message');
+            } else if (!localStorage.getItem(`fintab_${bid}_first_boot_seen`)) {
+                notify(`Welcome Mr. ${userObj.name.split(' ')[0]} to ${businessProfile?.businessName || 'Business'}`, "success");
+                localStorage.setItem(`fintab_${bid}_first_boot_seen`, 'true');
+            }
+
+        } catch (err) { 
+            console.error("Identity Resolution Failed:", err); 
+            notify("Identity Hub Error", "error");
+        }
     };
 
-    // PROTOCOL HANDLERS (With Mandatory Notifications)
-    const handleUpdateProducts = (p: Product[]) => { setProducts(p); persistData('products', p); notify("Inventory Synced", "success"); };
-    const handleUpdateSales = (s: Sale[]) => { setSales(s); persistData('sales', s); notify("Ledger Updated", "success"); };
-    const handleUpdateCustomers = (c: Customer[]) => { setCustomers(c); persistData('customers', c); notify("Client Node Verified", "success"); };
-    const handleUpdateUsers = (u: User[]) => { setUsers(u); persistData('users', u); notify("Staff Registry Synced", "success"); };
-    const handleUpdateExpenses = (e: Expense[]) => { setExpenses(e); persistData('expenses', e); notify("Debit Ledger Locked", "success"); };
-    const handleUpdateExpenseRequests = (r: ExpenseRequest[]) => { setExpenseRequests(r); persistData('expense_requests', r); notify("Request Transmitted", "info"); };
-    const handleUpdateDeposits = (d: Deposit[]) => { setDeposits(d); persistData('deposits', d); notify("Liquidity Logged", "info"); };
-    const handleUpdateBankAccounts = (b: BankAccount[]) => { setBankAccounts(b); persistData('bank_accounts', b); notify("Treasury Nodes Synced", "success"); };
-    const handleUpdateBankTransactions = (t: BankTransaction[]) => { setBankTransactions(t); persistData('bank_transactions', t); };
-    const handleUpdateCashCounts = (c: CashCount[]) => { setCashCounts(c); persistData('cash_counts', c); notify("Audit Signature Recorded", "success"); };
-    const handleUpdateGoodsCostings = (c: GoodsCosting[]) => { setGoodsCostings(c); persistData('goods_costings', c); notify("Yield Profile Synced", "success"); };
-    const handleUpdateGoodsReceivings = (r: GoodsReceiving[]) => { setGoodsReceivings(r); persistData('goods_receivings', r); notify("Logistics Record Locked", "success"); };
-    const handleUpdateWeeklyChecks = (w: WeeklyInventoryCheck[]) => { setWeeklyChecks(w); persistData('weekly_checks', w); notify("Audit Confirmed", "success"); };
-    const handleUpdateNotifications = (n: AppNotification[]) => { setNotifications(n); persistData('notifications', n); };
-    const handleUpdateAnomalyAlerts = (a: AnomalyAlert[]) => { setAnomalyAlerts(a); persistData('anomaly_alerts', a); };
+    const attemptAutoSelectBusiness = async (sbUser: any) => {
+        const registry = getStoredItem<AdminBusinessData[]>('fintab_businesses_registry', []);
+        
+        // Check for invited nodes first
+        const inviteNode = registry.find(b => {
+             const users = getStoredItem<User[]>(`fintab_${b.id}_users`, []);
+             return users.some(u => u.email.toLowerCase() === sbUser.email.toLowerCase());
+        });
 
-    // AUTH LIFE CYCLE
+        const myBusinesses = registry.filter(b => b.owner.email.toLowerCase() === sbUser.email.toLowerCase() || b.id === inviteNode?.id);
+
+        if (myBusinesses.length === 1) {
+            const bid = myBusinesses[0].id;
+            setActiveBusinessId(bid);
+            localStorage.setItem('fintab_active_business_id', bid);
+            await fetchAllBusinessData(bid, sbUser);
+            return true;
+        }
+        return false;
+    };
+
+    // AUTH ENGINE
     useEffect(() => {
-        const watchdog = setTimeout(() => {
-            if (!isInitialized) setIsInitialized(true);
-        }, 5000); // Guard: splash screen must clear after 5s
-
         const init = async () => {
             if (!isSupabaseConfigured) { setIsInitialized(true); return; }
             const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
-                processSessionUser(session.user);
-                const bid = localStorage.getItem('fintab_active_business_id');
-                if (bid) await fetchAllBusinessData(bid);
+                let bid = localStorage.getItem('fintab_active_business_id');
+                if (!bid) {
+                    const autoSelected = await attemptAutoSelectBusiness(session.user);
+                    if (!autoSelected) navigate('/select-business');
+                } else {
+                    await fetchAllBusinessData(bid, session.user);
+                }
+            } else {
+                // Check for local simulator session (Demo Mode)
+                const localSession = getStoredItem<User>('fintab_simulator_session', null);
+                if (localSession && activeBusinessId) {
+                    setCurrentUser(localSession);
+                    // Minimal fetch for demo (mostly local data)
+                    const demoBiz = getStoredItem<AdminBusinessData[]>('fintab_businesses_registry', []).find(b => b.id === activeBusinessId);
+                    if (demoBiz) setBusinessProfile(demoBiz.profile);
+                }
             }
             setIsInitialized(true);
         };
         init();
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' && session?.user) {
-                processSessionUser(session.user);
-                const bid = localStorage.getItem('fintab_active_business_id');
-                if (bid) await fetchAllBusinessData(bid);
-            } else if (event === 'SIGNED_OUT') { handleLogout(true); }
+                let bid = localStorage.getItem('fintab_active_business_id');
+                if (!bid) {
+                    const autoSelected = await attemptAutoSelectBusiness(session.user);
+                    if (autoSelected) navigate('/dashboard');
+                    else navigate('/select-business');
+                } else {
+                    await fetchAllBusinessData(bid, session.user);
+                    navigate('/dashboard');
+                }
+            } else if (event === 'SIGNED_OUT') { 
+                handleLogout(true); 
+            }
         });
-        return () => {
-            clearTimeout(watchdog);
-            subscription.unsubscribe();
-        }
+        return () => subscription.unsubscribe();
     }, []);
-
-    const processSessionUser = (sbUser: any) => {
-        const userObj: User = {
-            id: sbUser.id,
-            name: sbUser.user_metadata?.full_name || sbUser.email?.split('@')[0] || 'User',
-            email: sbUser.email!,
-            avatarUrl: sbUser.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(sbUser.email!)}`,
-            role: 'Owner',
-            status: 'Active'
-        };
-        setCurrentUser(userObj);
-        setStoredItemAndDispatchEvent('fintab_simulator_session', userObj);
-    };
 
     const handleLogout = async (skipSupabase = false) => {
         if (!skipSupabase && isSupabaseConfigured) await supabase.auth.signOut();
@@ -305,13 +363,35 @@ const App = () => {
     const handleSelectBusiness = async (id: string) => {
         setActiveBusinessId(id);
         localStorage.setItem('fintab_active_business_id', id);
-        await fetchAllBusinessData(id);
-        notify("Protocol Authorized", "success");
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+            await fetchAllBusinessData(id, session.user);
+        } else {
+            // Local Session fallback for Demo
+            const demoBiz = getStoredItem<AdminBusinessData[]>('fintab_businesses_registry', []).find(b => b.id === id);
+            if (demoBiz) setBusinessProfile(demoBiz.profile);
+        }
         navigate('/dashboard');
     };
 
+    // STATE UPDATERS
+    const handleUpdateProducts = (p: Product[]) => { setProducts(p); persistData('products', p); };
+    const handleUpdateSales = (s: Sale[]) => { setSales(s); persistData('sales', s); };
+    const handleUpdateCustomers = (c: Customer[]) => { setCustomers(c); persistData('customers', c); };
+    const handleUpdateUsers = (u: User[]) => { setUsers(u); persistData('users', u); };
+    const handleUpdateExpenses = (e: Expense[]) => { setExpenses(e); persistData('expenses', e); };
+    const handleUpdateExpenseRequests = (r: ExpenseRequest[]) => { setExpenseRequests(r); persistData('expense_requests', r); };
+    const handleUpdateDeposits = (d: Deposit[]) => { setDeposits(d); persistData('deposits', d); };
+    const handleUpdateBankAccounts = (b: BankAccount[]) => { setBankAccounts(b); persistData('bank_accounts', b); };
+    const handleUpdateBankTransactions = (t: BankTransaction[]) => { setBankTransactions(t); persistData('bank_transactions', t); };
+    const handleUpdateCashCounts = (c: CashCount[]) => { setCashCounts(c); persistData('cash_counts', c); };
+    const handleUpdateGoodsCostings = (c: GoodsCosting[]) => { setGoodsCostings(c); persistData('goods_costings', c); };
+    const handleUpdateGoodsReceivings = (r: GoodsReceiving[]) => { setGoodsReceivings(r); persistData('goods_receivings', r); };
+    const handleUpdateWeeklyChecks = (w: WeeklyInventoryCheck[]) => { setWeeklyChecks(w); persistData('weekly_checks', w); };
+    const handleUpdateNotifications = (n: AppNotification[]) => { setNotifications(n); persistData('notifications', n); };
+    const handleUpdateAnomalyAlerts = (a: AnomalyAlert[]) => { setAnomalyAlerts(a); persistData('anomaly_alerts', a); };
+
     const t = useCallback((key: string) => {
-        if (!key) return '';
         const dict = translations[language] || translations['en'];
         return dict[key] || translations['en'][key] || key;
     }, [language]);
@@ -333,7 +413,10 @@ const App = () => {
         setCart(newCart);
     };
 
-    if (!isInitialized) return <SplashScreen onComplete={() => setIsInitialized(true)} />;
+    // Ensure splash intro shows for a professional feel
+    if (showIntro) return <SplashScreen onComplete={() => setShowIntro(false)} />;
+    // Wait for init to finish cold boot session check
+    if (!isInitialized) return null;
 
     return (
         <div className="flex h-screen bg-slate-50 dark:bg-gray-950 overflow-hidden font-sans">
@@ -372,9 +455,9 @@ const App = () => {
                         <Route path="/settings" element={currentUser && activeBusinessId ? <Settings {...{ language, setLanguage: (l) => { setLanguage(l); localStorage.setItem(`fintab_${activeBusinessId}_lang`, l); persistData('lang', l); }, t, currentUser, receiptSettings, setReceiptSettings: (s) => { setReceiptSettings(s); persistData('receipt_settings', s); notify("Protocol Updated", "success"); }, theme, setTheme: (th) => { setTheme(th); localStorage.setItem(`fintab_${activeBusinessId}_theme`, th); persistData('theme', th); } }} /> : <Navigate to="/login" />} />
                         <Route path="/settings/receipts" element={currentUser && activeBusinessId ? <ReceiptSettings settings={receiptSettings} setSettings={(s) => { setReceiptSettings(s); persistData('receipt_settings', s); notify("Visual Identity Synced", "success"); }} t={t} /> : <Navigate to="/login" />} />
                         <Route path="/settings/permissions" element={currentUser && activeBusinessId ? <Permissions permissions={permissions} onUpdatePermissions={(p) => { setPermissions(p); persistData('permissions', p); notify("Access Matrix Authorized", "success"); }} t={t} users={users} /> : <Navigate to="/login" />} />
-                        <Route path="/settings/business" element={currentUser && activeBusinessId ? <BusinessSettings settings={businessSettings} onUpdateSettings={(s) => { setBusinessSettings(s); persistData('settings', s); notify("Core Logic Synced", "success"); }} businessProfile={businessProfile} onUpdateBusinessProfile={(p) => { setBusinessProfile(p); persistData('profile', p); notify("Profile Updated", "success"); }} onResetBusiness={() => { if(confirm("Terminate local node?")) { localStorage.clear(); window.location.reload(); } }} t={t} currentUser={currentUser} users={users} onUpdateCurrentUserProfile={(p) => { const next = { ...currentUser, ...p }; setCurrentUser(next); const updated = users.map(u => u.id === currentUser.id ? next : u); handleUpdateUsers(updated); setStoredItemAndDispatchEvent('fintab_simulator_session', next); }} /> : <Navigate to="/login" />} />
-                        <Route path="/settings/owner" element={currentUser && activeBusinessId ? <OwnerSettingsPage ownerSettings={ownerSettings} onUpdate={(s) => { setOwnerSettings(s); persistData('owner_settings', s); notify("Override Protocol Applied", "success"); }} t={t} /> : <Navigate to="/login" />} />
-                        <Route path="/settings/printer" element={currentUser && activeBusinessId ? <PrinterSettings settings={printerSettings} onUpdateSettings={(s) => { setPrinterSettings(s); persistData('printer_settings', s); notify("Hardware Logic Synced", "success"); }} /> : <Navigate to="/login" />} />
+                        <Route path="/settings/business" element={currentUser && activeBusinessId ? <BusinessSettings settings={businessSettings} onUpdateSettings={(s) => { setBusinessSettings(s); persistData('settings', s); notify("Core Logic Synced", "success"); }} businessProfile={businessProfile} onUpdateBusinessProfile={(p) => { setBusinessProfile(p); persistData('profile', p); notify("Profile Updated", "success"); }} onResetBusiness={() => { if(confirm("Terminate node?")) { localStorage.clear(); window.location.reload(); } }} t={t} currentUser={currentUser} users={users} onUpdateCurrentUserProfile={(p) => { const next = { ...currentUser, ...p }; setCurrentUser(next); const updated = users.map(u => u.id === currentUser.id ? next : u); handleUpdateUsers(updated); setStoredItemAndDispatchEvent('fintab_simulator_session', next); }} /> : <Navigate to="/login" />} />
+                        <Route path="/settings/owner" element={currentUser && activeBusinessId ? <OwnerSettingsPage ownerSettings={ownerSettings} onUpdate={(s) => { setOwnerSettings(s); persistData('owner_settings', s); notify("Override Applied", "success"); }} t={t} /> : <Navigate to="/login" />} />
+                        <Route path="/settings/printer" element={currentUser && activeBusinessId ? <PrinterSettings settings={printerSettings} onUpdateSettings={(s) => { setPrinterSettings(s); persistData('printer_settings', s); notify("Hardware Synced", "success"); }} /> : <Navigate to="/login" />} />
                         
                         <Route path="/directory" element={<Directory />} />
                         <Route path="/public-shopfront/:businessId" element={<PublicStorefront />} />
@@ -387,6 +470,12 @@ const App = () => {
                     </Routes>
                 </main>
             </div>
+            {syncStatus === 'syncing' && (
+                <div className="fixed bottom-4 left-4 z-[300] bg-slate-900 text-white text-[8px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-lg border border-white/10 flex items-center gap-2 animate-fade-in">
+                    <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse"></div>
+                    Syncing Ledger...
+                </div>
+            )}
         </div>
     );
 };
