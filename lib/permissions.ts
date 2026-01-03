@@ -136,14 +136,6 @@ export const MODULE_CONFIG: ModuleConfig[] = [
         ]
     },
     {
-        key: 'AI',
-        name: 'AI Assistant',
-        actions: [
-            { key: 'view_assistant', name: 'Use AI Assistant', description: 'Access the FinTab AI intelligence node.' },
-            { key: 'admin_ai', name: 'Admin AI Policy', description: 'Manage AI filtering rules and data access.' },
-        ]
-    },
-    {
         key: 'SETTINGS',
         name: 'Settings',
         actions: [
@@ -184,26 +176,22 @@ export const DEFAULT_PERMISSIONS: AppPermissions = {
             CUSTOMERS: { view_customers: true, create_customer: true, edit_customer: true },
             EXPENSES: { view_expenses: true, add_expense: true },
             REPORTS: { view_sales_reports: true },
-            FINANCE: { cash_count_enter: true, weekly_inventory_check_enter: true, goods_receiving_enter: true },
-            AI: { view_assistant: true }
+            FINANCE: { cash_count_enter: true, weekly_inventory_check_enter: true, goods_receiving_enter: true }
         },
         'Staff': {
             SALES: { view_counter: true, create_sale: true, cash_sale: true, bank_transfer: true, view_client_requests: true },
             INVENTORY: { view_inventory: true },
             CUSTOMERS: { view_customers: true, create_customer: true },
-            EXPENSES: { view_expenses: true },
-            AI: { view_assistant: true }
+            EXPENSES: { view_expenses: true }
         },
         'Cashier': {
             SALES: { view_counter: true, create_sale: true, cash_sale: true, bank_transfer: true, view_client_requests: true },
             INVENTORY: { view_inventory: true },
             CUSTOMERS: { view_customers: true, create_customer: true },
-            EXPENSES: { view_expenses: true },
-            AI: { view_assistant: true }
+            EXPENSES: { view_expenses: true }
         },
         'Investor': {
-            INVESTORS: { view_own_investment: true, view_own_profit_share: true },
-            AI: { view_assistant: true }
+            INVESTORS: { view_own_investment: true, view_own_profit_share: true }
         },
         'Custom': {},
     },

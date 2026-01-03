@@ -2,7 +2,6 @@
 import React, { memo, useMemo, useEffect, useState, useRef } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { 
-    AIIcon, 
     DashboardIcon,
     StorefrontIcon, 
     InventoryIcon, 
@@ -67,7 +66,6 @@ const Sidebar: React.FC<SidebarProps> = ({ t, isOpen, setIsOpen, cart, currentUs
         return {
             main: [
                 { to: '/dashboard', text: t('sidebar.dashboard'), icon: <DashboardIcon /> },
-                { to: '/assistant', text: t('sidebar.aiAssistant'), icon: <AIIcon />, module: 'AI', action: 'view_assistant' },
                 { to: '/today', text: t('today.title'), icon: <TodayIcon />, module: 'REPORTS', action: 'view_sales_reports' },
                 { to: '/reports', text: t('reports.title'), icon: <ReportsIcon />, module: 'REPORTS', action: 'view_sales_reports' },
                 { to: '/items', text: 'Internal Items', icon: <InventoryIcon />, module: 'SALES', action: 'view_counter' },
@@ -100,21 +98,20 @@ const Sidebar: React.FC<SidebarProps> = ({ t, isOpen, setIsOpen, cart, currentUs
 
     // Ensure the relevant section is open based on the current path
     useEffect(() => {
-        const isFinancePath = allNavItems.finance.some(item => item.to === location.pathname);
-        if (isFinancePath) {
+        const isFinanceOpenNode = allNavItems.finance.some(item => item.to === location.pathname);
+        if (isFinanceOpenNode) {
             setIsFinanceOpen(true);
         }
 
         // Auto-scroll the active item into view
         const timeout = setTimeout(() => {
             if (navContainerRef.current) {
-                // Find the active NavLink (usually contains bg-primary in this app's styling)
                 const activeEl = navContainerRef.current.querySelector('.bg-primary, .text-primary.font-black');
                 if (activeEl) {
                     activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
             }
-        }, 150); // Small delay to allow NavLink and Collapse animations to resolve
+        }, 150);
 
         return () => clearTimeout(timeout);
     }, [location.pathname, allNavItems.finance, isOpen]);

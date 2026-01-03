@@ -4,7 +4,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import type { Product, Customer, User, ReceiptSettingsData, Sale, Deposit, CustomPayment, OwnerSettings, BusinessSettingsData, Expense, AppPermissions, BusinessProfile, PerformanceUser, ExpenseRequest, AnomalyAlert, WorkflowRoleKey } from '../types';
 import Card from './Card';
-import { CustomersIcon, InventoryIcon, StaffIcon, InvestorIcon, WarningIcon, CloseIcon, AIIcon, LinkIcon, FINALIZED_SALE_STATUSES, StorefrontIcon, ReportsIcon, ExpensesIcon, LightBulbIcon, CounterIcon, PlusIcon, SearchIcon } from '../constants';
+import { CustomersIcon, InventoryIcon, StaffIcon, InvestorIcon, WarningIcon, CloseIcon, LinkIcon, FINALIZED_SALE_STATUSES, StorefrontIcon, ReportsIcon, ExpensesIcon, LightBulbIcon, CounterIcon, PlusIcon, SearchIcon } from '../constants';
 import { formatCurrency, formatAbbreviatedNumber, getStoredItem } from '../lib/utils';
 import RequestsDashboard from './RequestsDashboard';
 import UserDetailModal from './UserDetailModal';
@@ -30,82 +30,9 @@ class WidgetErrorBoundary extends React.Component<{ children: React.ReactNode },
     }
 }
 
-const AISuggestions: React.FC<{ stats: any }> = ({ stats }) => {
-    const [isLoading, setIsLoading] = useState(true);
-
-    useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 1400);
-        return () => clearTimeout(timer);
-    }, []);
-
-    const suggestions = useMemo(() => {
-        if (!stats) return [];
-        const items = [];
-        const now = new Date();
-
-        if (stats.missingCostCount > 0) {
-            items.push({
-                icon: <InventoryIcon />,
-                text: `${stats.missingCostCount} products are missing cost price; add costs to improve profit accuracy.`,
-                link: '/inventory',
-                type: 'Accounting'
-            });
-        }
-
-        const highlyStagnant = stats.leastSellers?.filter(p => {
-            if (!p.lastSold) return true;
-            const daysSince = Math.floor((now.getTime() - new Date(p.lastSold).getTime()) / (1000 * 60 * 60 * 24));
-            return daysSince > 30;
-        }) || [];
-        
-        if (highlyStagnant.length > 0) {
-            const sample = highlyStagnant[0];
-            const days = sample.lastSold ? Math.floor((now.getTime() - new Date(sample.lastSold).getTime()) / (1000 * 60 * 60 * 24)) : 'many';
-            items.push({
-                icon: <StorefrontIcon />,
-                text: `These least-selling items haven’t sold in ${days} days; consider discounting or bundling to free up capital.`,
-                link: '/inventory',
-                type: 'Strategy'
-            });
-        }
-
-        return items.slice(0, 3); 
-    }, [stats]);
-
-    if (isLoading) return <div className="animate-pulse h-48 bg-slate-50 dark:bg-gray-800/50 rounded-[2.5rem]"></div>;
-
-    return (
-        <div className="space-y-6 animate-fade-in font-sans">
-            <div className="flex items-center gap-4 px-4">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></div>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">Actionable Intelligence Feed</h3>
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {suggestions.map((item, i) => (
-                    <div key={i} className="bg-white dark:bg-gray-900 p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-50 dark:border-gray-800 flex flex-col justify-between hover:border-primary/40 hover:shadow-xl transition-all group">
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between">
-                                <div className="p-3 bg-slate-50 dark:bg-gray-800 text-primary rounded-2xl group-hover:bg-primary group-hover:text-white transition-colors">
-                                    {React.cloneElement(item.icon as React.ReactElement, { className: 'w-5 h-5' })}
-                                </div>
-                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-gray-800 px-3 py-1 rounded-full border dark:border-gray-700">{item.type}</span>
-                            </div>
-                            <p className="text-[11px] font-black text-slate-700 dark:text-slate-200 leading-relaxed uppercase tracking-tight">{item.text}</p>
-                        </div>
-                        <div className="mt-8 pt-6 border-t border-slate-50 dark:border-gray-800 flex justify-end">
-                            <NavLink to={item.link} className="text-[9px] font-black text-primary uppercase tracking-[0.3em] hover:underline">Execute Protocol →</NavLink>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
 const KPIMetric: React.FC<{ title: string; value: number | string; cs: string; colorClass?: string; caption?: string }> = ({ title, value, cs, colorClass = "text-slate-900 dark:text-white", caption }) => (
     <div 
-        className="bg-white dark:bg-gray-900 p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-50 dark:border-gray-800 flex flex-col justify-between h-full group hover:shadow-xl transition-all cursor-help"
+        className="bg-white dark:bg-gray-900 p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-gray-800 flex flex-col justify-between h-full group hover:shadow-xl transition-all cursor-help"
         title={typeof value === 'number' ? formatCurrency(value, cs) : value}
     >
         <div>
@@ -295,7 +222,7 @@ const Dashboard: React.FC<DashboardProps> = (props) => {
                 <div className="relative flex flex-col md:flex-row justify-between items-center gap-6 sm:gap-10">
                     <div className="flex items-center gap-6 sm:gap-10 w-full sm:w-auto">
                         <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/5 backdrop-blur-xl rounded-3xl flex items-center justify-center border border-white/10 shadow-inner flex-shrink-0">
-                            <AIIcon className="w-8 h-8 sm:w-10 sm:h-10 text-primary" />
+                            <StorefrontIcon className="w-8 h-8 sm:w-10 sm:h-10 text-primary" />
                         </div>
                         <div className="min-w-0">
                             <h2 className="text-2xl sm:text-4xl font-black uppercase tracking-tighter leading-none truncate">Terminal: {currentUser?.name?.split(' ')[0]}</h2>
@@ -383,7 +310,7 @@ const Dashboard: React.FC<DashboardProps> = (props) => {
             {/* Staff-Specific Action Hub */}
             {isStaff && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-10 animate-fade-in">
-                    <div className="lg:col-span-2">
+                    <div className="lg:col-span-3">
                         <NavLink to="/counter" className="relative h-full min-h-[220px] sm:min-h-[280px] p-8 sm:p-12 bg-slate-900 text-white rounded-[2.5rem] sm:rounded-[3.5rem] shadow-2xl flex flex-col justify-center group hover:scale-[1.01] transition-all border border-white/5 overflow-hidden">
                             <div className="absolute top-0 right-0 w-48 sm:w-64 h-48 sm:h-64 bg-primary/20 rounded-full -mr-24 sm:-mr-32 -mt-24 sm:-mt-32 blur-[60px] sm:blur-[100px] group-hover:scale-110 transition-transform duration-1000"></div>
                             <div className="relative z-10">
@@ -399,19 +326,6 @@ const Dashboard: React.FC<DashboardProps> = (props) => {
                                 <CounterIcon className="w-16 h-16 sm:w-24 sm:h-24 text-white" />
                             </div>
                         </NavLink>
-                    </div>
-                    <div className="lg:col-span-1">
-                        <div className="bg-white dark:bg-gray-900 p-8 rounded-[2.5rem] border border-slate-50 dark:border-gray-800 shadow-sm flex flex-col justify-between h-full">
-                            <div className="flex items-center gap-5">
-                                <div className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 p-4 rounded-2xl shadow-sm"><LightBulbIcon className="w-6 h-6" /></div>
-                                <div>
-                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">AI Intel</h4>
-                                    <p className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-tighter mt-1">Operational Logic</p>
-                                </div>
-                            </div>
-                            <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed mt-8 uppercase tracking-tight">Access global SKU datasets and terminal logic optimization via Gemini 3 AI.</p>
-                            <NavLink to="/assistant" className="mt-8 py-4 w-full bg-slate-50 dark:bg-gray-800 text-[9px] font-black text-primary uppercase text-center rounded-2xl tracking-[0.3em] hover:bg-primary hover:text-white transition-all">Assistant Hub →</NavLink>
-                        </div>
                     </div>
                 </div>
             )}
@@ -568,10 +482,6 @@ const Dashboard: React.FC<DashboardProps> = (props) => {
                             </div>
                         </div>
                     </div>
-
-                    <WidgetErrorBoundary>
-                        <AISuggestions stats={stats} />
-                    </WidgetErrorBoundary>
                 </div>
             )}
 
