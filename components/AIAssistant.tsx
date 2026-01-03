@@ -159,7 +159,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                         placeholder="Inquire about sales, inventory, or trends..."
-                        className="flex-1 bg-white dark:bg-gray-950 border-none rounded-2xl px-6 py-4 text-sm font-bold shadow-sm focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+                        className="flex-1 bg-white dark:bg-gray-950 border-none rounded-2xl px-6 py-4 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-400 shadow-sm focus:ring-4 focus:ring-primary/10 transition-all outline-none caret-primary"
                     />
                     <button 
                         onClick={handleSend}
