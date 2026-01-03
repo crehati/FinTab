@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-            'vendor-utils': ['recharts', 'lucide-react', '@supabase/supabase-js'],
+            'vendor-utils': ['recharts', '@supabase/supabase-js'],
             'vendor-ai': ['@google/genai'],
           },
         },
