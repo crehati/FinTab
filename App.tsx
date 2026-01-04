@@ -325,13 +325,11 @@ const App = () => {
             if (session?.user) {
                 let bid = localStorage.getItem('fintab_active_business_id');
                 if (!bid) {
-                    const autoSelected = await attemptAutoSelectBusiness(session.user);
-                    // autoSelected calls fetchAllBusinessData
+                    await attemptAutoSelectBusiness(session.user);
                 } else {
                     await fetchAllBusinessData(bid, session.user);
                 }
             } else {
-                // Check for local simulator session (Demo Mode)
                 const localSession = getStoredItem<User>('fintab_simulator_session', null);
                 if (localSession) {
                     setCurrentUser(localSession);
@@ -372,14 +370,13 @@ const App = () => {
     };
 
     const handleSelectBusiness = async (id: string) => {
-        setIsInitialized(false);
+        // No setIsInitialized(false) here to prevent router unmount loop
         setActiveBusinessId(id);
         localStorage.setItem('fintab_active_business_id', id);
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
             await fetchAllBusinessData(id, session.user);
         } else {
-            // Local Session fallback for Demo
             const demoBiz = getStoredItem<AdminBusinessData[]>('fintab_businesses_registry', []).find(b => b.id === id);
             if (demoBiz) {
                 setBusinessProfile(demoBiz.profile);
@@ -387,7 +384,6 @@ const App = () => {
                 if (localSession) setCurrentUser(localSession);
             }
         }
-        setIsInitialized(true);
         navigate('/dashboard', { replace: true });
     };
 
@@ -431,6 +427,8 @@ const App = () => {
     };
 
     if (showIntro) return <SplashScreen onComplete={() => setShowIntro(false)} />;
+    
+    // GATED RENDER: Do not evaluate redirects during boot
     if (!isInitialized) return <LoadingOverlay />;
 
     return (
@@ -446,11 +444,11 @@ const App = () => {
                 <main id="app-main-viewport" className={`flex-1 overflow-y-auto custom-scrollbar ${currentUser && activeBusinessId ? 'p-4 md:p-8 pb-32' : ''}`}>
                     <Routes>
                         <Route path="/join/:token" element={<JoinBusiness />} />
-                        <Route path="/login" element={!currentUser ? <Login language={language} setLanguage={setLanguage} t={t} /> : <Navigate to={activeBusinessId ? "/dashboard" : "/select-business"} replace />} />
+                        <Route path="/login" element={!currentUser ? <Login language={language} setLanguage={setLanguage} t={t} /> : <Navigate to="/dashboard" replace />} />
                         
                         <Route path="/select-business" element={currentUser ? <SelectBusiness currentUser={currentUser} onSelect={handleSelectBusiness} onLogout={() => handleLogout()} /> : <Navigate to="/login" replace />} />
                         
-                        {/* THE SECURE HUB ROUTE */}
+                        {/* SECURE ROUTE GUARDS: Evaluate ONLY after isInitialized is true */}
                         <Route path="/dashboard" element={
                             currentUser ? (
                                 activeBusinessId ? (
@@ -459,7 +457,7 @@ const App = () => {
                             ) : <Navigate to="/login" replace />
                         } />
 
-                        {/* PROTECTED ROUTES WRAPPER */}
+                        {/* UNIVERSAL PROTECTED GUARD */}
                         <Route path="/*" element={
                             !currentUser ? <Navigate to="/login" replace /> : (
                                 !activeBusinessId ? <Navigate to="/select-business" replace /> : (
