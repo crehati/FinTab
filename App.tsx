@@ -1,7 +1,7 @@
 
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useMemo, useLayoutEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation, Link, Outlet } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { getStoredItem, setStoredItemAndDispatchEvent, getSystemLogo, formatCurrency } from './lib/utils';
 import { 
@@ -151,6 +151,17 @@ export class ErrorBoundary extends React.Component<{ children?: React.ReactNode 
     }
 }
 
+/**
+ * Robust Route Guard to prevent infinite redirect loops.
+ * Decisions are made only after the initialization sequence is complete.
+ */
+const ProtectedRoute = ({ isInitialized, currentUser, activeBusinessId, requireBusiness = true }: { isInitialized: boolean, currentUser: User | null, activeBusinessId: string | null, requireBusiness?: boolean }) => {
+    if (!isInitialized) return <LoadingOverlay />;
+    if (!currentUser) return <Navigate to="/login" replace />;
+    if (requireBusiness && !activeBusinessId) return <Navigate to="/select-business" replace />;
+    return <Outlet />;
+};
+
 const App = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -161,7 +172,6 @@ const App = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle');
     
-    // Identity-Locked States
     const [language, setLanguage] = useState(() => {
         const bid = localStorage.getItem('fintab_active_business_id');
         return localStorage.getItem(bid ? `fintab_${bid}_lang` : 'fintab_lang') || 'en';
@@ -171,7 +181,6 @@ const App = () => {
         return (localStorage.getItem(bid ? `fintab_${bid}_theme` : 'fintab_theme') === 'dark') ? 'dark' : 'light';
     });
 
-    // Operational Data State
     const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
     const [businessSettings, setBusinessSettings] = useState<BusinessSettingsData>(DEFAULT_BUSINESS_SETTINGS);
     const [receiptSettings, setReceiptSettings] = useState<ReceiptSettingsData>(DEFAULT_RECEIPT_SETTINGS);
@@ -197,7 +206,6 @@ const App = () => {
 
     const systemLogo = getSystemLogo();
 
-    // CLOUD SYNC ENGINE
     const persistData = async (key: string, data: any, silent = true) => {
         if (!activeBusinessId) return;
         setSyncStatus('syncing');
@@ -279,7 +287,6 @@ const App = () => {
             setCurrentUser(userObj);
             setStoredItemAndDispatchEvent('fintab_simulator_session', userObj);
 
-            // Robust Welcome Message
             const welcomeMsg = sessionStorage.getItem('fintab_welcome_message');
             if (welcomeMsg) {
                 notify(welcomeMsg, "success");
@@ -297,13 +304,10 @@ const App = () => {
 
     const attemptAutoSelectBusiness = async (sbUser: any) => {
         const registry = getStoredItem<AdminBusinessData[]>('fintab_businesses_registry', []);
-        
-        // Check for invited nodes first
         const inviteNode = registry.find(b => {
              const users = getStoredItem<User[]>(`fintab_${b.id}_users`, []);
              return users.some(u => u.email && u.email.toLowerCase() === sbUser.email.toLowerCase());
         });
-
         const myBusinesses = registry.filter(b => (b.owner.email && b.owner.email.toLowerCase() === sbUser.email.toLowerCase()) || b.id === inviteNode?.id);
 
         if (myBusinesses.length === 1) {
@@ -316,7 +320,6 @@ const App = () => {
         return false;
     };
 
-    // AUTH ENGINE
     useEffect(() => {
         const init = async () => {
             if (!isSupabaseConfigured) { setIsInitialized(true); return; }
@@ -370,7 +373,6 @@ const App = () => {
     };
 
     const handleSelectBusiness = async (id: string) => {
-        // No setIsInitialized(false) here to prevent router unmount loop
         setActiveBusinessId(id);
         localStorage.setItem('fintab_active_business_id', id);
         const { data: { session } } = await supabase.auth.getSession();
@@ -428,7 +430,7 @@ const App = () => {
 
     if (showIntro) return <SplashScreen onComplete={() => setShowIntro(false)} />;
     
-    // GATED RENDER: Do not evaluate redirects during boot
+    // GATED RENDER: Do not evaluate routes until auth state is determined
     if (!isInitialized) return <LoadingOverlay />;
 
     return (
@@ -443,62 +445,53 @@ const App = () => {
                 )}
                 <main id="app-main-viewport" className={`flex-1 overflow-y-auto custom-scrollbar ${currentUser && activeBusinessId ? 'p-4 md:p-8 pb-32' : ''}`}>
                     <Routes>
+                        {/* UNPROTECTED ROUTES */}
                         <Route path="/join/:token" element={<JoinBusiness />} />
                         <Route path="/login" element={!currentUser ? <Login language={language} setLanguage={setLanguage} t={t} /> : <Navigate to="/dashboard" replace />} />
-                        
-                        <Route path="/select-business" element={currentUser ? <SelectBusiness currentUser={currentUser} onSelect={handleSelectBusiness} onLogout={() => handleLogout()} /> : <Navigate to="/login" replace />} />
-                        
-                        {/* SECURE ROUTE GUARDS: Evaluate ONLY after isInitialized is true */}
-                        <Route path="/dashboard" element={
-                            currentUser ? (
-                                activeBusinessId ? (
-                                    <Dashboard {...{ products, customers, users, sales, expenses, deposits, expenseRequests, anomalyAlerts, currentUser, businessProfile, businessSettings, ownerSettings, receiptSettings, permissions, t, lowStockThreshold: 10, isSafeMode: false, onApproveClientOrder: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'completed'} : x); handleUpdateSales(s); }, onRejectClientOrder: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'rejected'} : x); handleUpdateSales(s); }, onUpdateWithdrawalStatus: (uid, wid, st) => { const updated = users.map(u => u.id === uid ? {...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? {...w, status: st} : w)} : u); handleUpdateUsers(updated); }, handleUpdateCustomPaymentStatus: (uid, pid, st) => { const updated = users.map(u => u.id === uid ? {...u, customPayments: (u.withdrawals || []).map(p => p.id === pid ? {...p, status: st} : p)} : u); handleUpdateUsers(updated); }, onUpdateExpenseRequestStatus: (rid, st) => { const updated = expenseRequests.map(r => r.id === rid ? {...r, status: st} : r); handleUpdateExpenseRequests(updated); }, onUpdateDepositStatus: (did, st) => { const updated = deposits.map(d => d.id === did ? {...d, status: st} : d); handleUpdateDeposits(updated); }, onApproveBankSale: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'completed'} : x); handleUpdateSales(s); }, onRejectBankSale: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'rejected'} : x); handleUpdateSales(s); }, onDismissAnomaly: (id, reason) => { const a = anomalyAlerts.map(x => x.id === id ? {...x, isDismissed: true, dismissalReason: reason} : x); handleUpdateAnomalyAlerts(a); }, onMarkAnomalyRead: (id) => { const a = anomalyAlerts.map(x => x.id === id ? {...x, isRead: true} : x); handleUpdateAnomalyAlerts(a); } }} />
-                                ) : <Navigate to="/select-business" replace />
-                            ) : <Navigate to="/login" replace />
-                        } />
-
-                        {/* UNIVERSAL PROTECTED GUARD */}
-                        <Route path="/*" element={
-                            !currentUser ? <Navigate to="/login" replace /> : (
-                                !activeBusinessId ? <Navigate to="/select-business" replace /> : (
-                                    <Routes>
-                                        <Route path="/inventory" element={<Inventory {...{ products, setProducts: handleUpdateProducts, t, receiptSettings, currentUser, users, handleSaveProduct: (p, edit) => { const updated = edit ? products.map(old => old.id === p.id ? p : old) : [p, ...products]; handleUpdateProducts(updated); }, onSaveStockAdjustment: (id, adj) => { const updated = products.map(p => { if (p.id === id) { const ns = adj.type === 'add' ? p.stock + adj.quantity : p.stock - adj.quantity; return { ...p, stock: ns, stockHistory: [{ date: new Date().toISOString(), userId: currentUser.id, ...adj, newStockLevel: ns }, ...(p.stockHistory || [])] }; } return p; }); handleUpdateProducts(updated); } }} />} />
-                                        <Route path="/customers" element={<Customers {...{ customers, setCustomers: handleUpdateCustomers, t, receiptSettings }} />} />
-                                        <Route path="/users" element={<Users {...{ users, sales, customers, t, currentUser, receiptSettings, permissions, ownerSettings, businessProfile, onSaveUser: (u, edit, id) => { const updated = edit ? users.map(old => old.id === id ? { ...old, ...u } : old) : [{ ...u, id: `u-${Date.now()}`, avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}` }, ...users]; handleUpdateUsers(updated); }, onDeleteUser: (id) => { const updated = users.filter(u => u.id !== id); handleUpdateUsers(updated); }, handleInitiateCustomPayment: (target, amt, desc) => { const p = { id: `cp-${Date.now()}`, dateInitiated: new Date().toISOString(), amount: amt, description: desc, status: 'pending_owner_approval', initiatedBy: currentUser.name, auditLog: [] }; const updated = users.map(u => u.id === target ? { ...u, customPayments: [p, ...(u.customPayments || [])] } : u); handleUpdateUsers(updated); } }} />} />
-                                        <Route path="/receipts" element={<Receipts {...{ sales, customers, users, t, receiptSettings, currentUser, isTrialExpired: false, printerSettings, onDeleteSale: (id) => { const updated = sales.filter(s => s.id !== id); handleUpdateSales(updated); } }} />} />
-                                        <Route path="/proforma" element={<Proforma {...{ sales, customers, users, t, receiptSettings, currentUser, isTrialExpired: false, printerSettings, onDeleteSale: (id) => { const updated = sales.filter(s => s.id !== id); handleUpdateSales(updated); } }} />} />
-                                        <Route path="/items" element={<Items {...{ products, cart, t, receiptSettings, onUpdateCartItem: handleUpdateCartItem }} />} />
-                                        <Route path="/counter" element={<Counter {...{ cart, customers, users, onUpdateCartItem: handleUpdateCartItem, onProcessSale: (sale) => { const s = [sale, ...sales]; handleUpdateSales(s); if(sale.status === 'completed') { const p = products.map(x => { const item = sale.items.find(i => i.product.id === x.id); return item ? {...x, stock: x.stock - item.quantity} : x; }); handleUpdateProducts(p); } }, onClearCart: () => setCart([]), receiptSettings, t, currentUser, businessSettings, printerSettings, isTrialExpired: false, permissions, bankAccounts, onAddCustomer: (c) => { const nc = { ...c, id: `c-${Date.now()}`, joinDate: new Date().toISOString(), purchaseHistory: [] }; handleUpdateCustomers([nc, ...customers]); return nc; } }} />} />
-                                        <Route path="/expenses" element={<Expenses {...{ expenses, setExpenses: handleUpdateProducts, t, receiptSettings }} />} />
-                                        <Route path="/expense-requests" element={<ExpenseRequestPage {...{ expenseRequests, expenses, currentUser, handleRequestExpense: (r) => handleUpdateExpenseRequests([{...r, id: `req-${Date.now()}`, date: new Date().toISOString(), userId: currentUser.id, status: 'pending'}, ...expenseRequests]), receiptSettings, t }} />} />
-                                        <Route path="/profile" element={<MyProfile {...{ currentUser, users, sales, expenses, customers, products, receiptSettings, t, onRequestWithdrawal: (uid, amt, src) => { const w = { id: `wd-${Date.now()}`, date: new Date().toISOString(), amount: amt, status: 'pending', source: src, auditLog: [] }; const updated = users.map(u => u.id === uid ? { ...u, withdrawals: [w, ...(u.withdrawals || [])] } : u); handleUpdateUsers(updated); }, handleUpdateCustomPaymentStatus: (uid, pid, st) => { const updated = users.map(u => u.id === uid ? {...u, customPayments: (u.withdrawals || []).map(p => p.id === pid ? {...p, status: st} : p)} : u); handleUpdateUsers(updated); }, handleInitiateCustomPayment: (target, amt, desc) => { const p = { id: `cp-${Date.now()}`, dateInitiated: new Date().toISOString(), amount: amt, description: desc, status: 'pending_owner_approval', initiatedBy: currentUser.name, auditLog: [] }; const updated = users.map(u => u.id === target ? { ...u, customPayments: [p, ...(u.customPayments || [])] } : u); handleUpdateUsers(updated); }, onUpdateWithdrawalStatus: (uid, wid, st) => { const updated = users.map(u => u.id === uid ? {...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? {...w, status: st} : w)} : u); handleUpdateUsers(updated); }, onConfirmWithdrawalReceived: (uid, wid) => { const updated = users.map(u => u.id === uid ? {...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? {...w, status: 'completed'} : w)} : u); handleUpdateUsers(updated); }, onSwitchUser: (u) => { setCurrentUser(u); setStoredItemAndDispatchEvent('fintab_simulator_session', u); window.location.reload(); }, onUpdateCurrentUserProfile: (p) => { const next = { ...currentUser, ...p }; setCurrentUser(next); const updated = users.map(u => u.id === currentUser.id ? next : u); handleUpdateUsers(updated); setStoredItemAndDispatchEvent('fintab_simulator_session', next); }, businessProfile, ownerSettings, businessSettings, companyValuations: [] }} />} />
-                                        <Route path="/cash-count" element={<CashCountPage {...{ cashCounts, setCashCounts: handleUpdateCashCounts, users, sales, currentUser, receiptSettings, permissions, businessSettings, businessProfile, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} />} />
-                                        <Route path="/bank-accounts" element={<BankAccountsPage {...{ bankAccounts, setBankAccounts: handleUpdateBankAccounts, bankTransactions, setBankTransactions: handleUpdateBankTransactions, receiptSettings, currentUser, users }} />} />
-                                        <Route path="/goods-costing" element={<GoodsCostingPage {...{ goodsCostings, setGoodsCostings: handleUpdateGoodsCostings, products, setProducts: handleUpdateProducts, users, currentUser, receiptSettings, businessSettings, businessProfile, permissions, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} />} />
-                                        <Route path="/goods-receiving" element={<GoodsReceivingPage {...{ goodsReceivings, setGoodsReceivings: handleUpdateGoodsReceivings, products, setProducts: handleUpdateProducts, users, currentUser, receiptSettings, businessSettings, businessProfile, permissions, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} />} />
-                                        <Route path="/weekly-inventory-check" element={<WeeklyInventoryCheckPage {...{ weeklyChecks, setWeeklyChecks: handleUpdateWeeklyChecks, products, users, currentUser, receiptSettings, businessSettings, businessProfile, permissions, createNotification: (target, title, message, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} />} />
-                                        <Route path="/alerts" element={<AlertsPage {...{ anomalyAlerts, onDismiss: (id, r) => handleUpdateAnomalyAlerts(anomalyAlerts.map(a => a.id === id ? {...a, isDismissed: true, dismissalReason: r} : a)), onMarkRead: (id) => handleUpdateAnomalyAlerts(anomalyAlerts.map(a => a.id === id ? {...a, isRead: true} : a)), receiptSettings, currentUser }} />} />
-                                        <Route path="/settings" element={<Settings {...{ language, setLanguage: (l) => { setLanguage(l); localStorage.setItem(`fintab_${activeBusinessId}_lang`, l); persistData('lang', l); }, t, currentUser, receiptSettings, setReceiptSettings: (s) => { setReceiptSettings(s); persistData('receipt_settings', s); notify("Protocol Updated", "success"); }, theme, setTheme: (th) => { setTheme(th); localStorage.setItem(`fintab_${activeBusinessId}_theme`, th); persistData('theme', th); } }} />} />
-                                        <Route path="/settings/receipts" element={<ReceiptSettings settings={receiptSettings} setSettings={(s) => { setReceiptSettings(s); persistData('receipt_settings', s); notify("Visual Identity Synced", "success"); }} t={t} />} />
-                                        <Route path="/settings/permissions" element={<Permissions permissions={permissions} onUpdatePermissions={(p) => { setPermissions(p); persistData('permissions', p); notify("Access Matrix Authorized", "success"); }} t={t} users={users} />} />
-                                        <Route path="/settings/business" element={<BusinessSettings settings={businessSettings} onUpdateSettings={(s) => { setBusinessSettings(s); persistData('settings', s); notify("Core Logic Synced", "success"); }} businessProfile={businessProfile} onUpdateBusinessProfile={(p) => { setBusinessProfile(p); persistData('profile', p); notify("Profile Updated", "success"); }} onResetBusiness={() => { if(confirm("Terminate node?")) { localStorage.clear(); window.location.reload(); } }} t={t} currentUser={currentUser} users={users} onUpdateCurrentUserProfile={(p) => { const next = { ...currentUser, ...p }; setCurrentUser(next); const updated = users.map(u => u.id === currentUser.id ? next : u); handleUpdateUsers(updated); setStoredItemAndDispatchEvent('fintab_simulator_session', next); }} />} />
-                                        <Route path="/settings/owner" element={<OwnerSettingsPage ownerSettings={ownerSettings} onUpdate={(s) => { setOwnerSettings(s); persistData('owner_settings', s); notify("Override Applied", "success"); }} t={t} />} />
-                                        <Route path="/settings/printer" element={<PrinterSettings settings={printerSettings} onUpdateSettings={(s) => { setPrinterSettings(s); persistData('printer_settings', s); notify("Hardware Synced", "success"); }} />} />
-                                        <Route path="/today" element={<Today {...{ sales, customers, expenses, products, t, receiptSettings }} />} />
-                                        <Route path="/reports" element={<Reports {...{ sales, products, expenses, customers, users, t, receiptSettings, currentUser, permissions, ownerSettings }} />} />
-                                        <Route path="/transactions" element={<Transactions {...{ sales, deposits, bankAccounts, users, receiptSettings, currentUser, onRequestDeposit: (amt, desc, bid) => { const d = { id: `dep-${Date.now()}`, date: new Date().toISOString(), amount: amt, description: desc, userId: currentUser.id, status: 'pending', bankAccountId: bid }; handleUpdateDeposits([d, ...deposits]); }, t }} />} />
-                                        <Route path="/commission" element={<Commission {...{ products, setProducts: handleUpdateProducts, t, receiptSettings }} />} />
-                                        <Route path="/investors" element={<InvestorPage {...{ users, sales, expenses, products, t, receiptSettings, currentUser, onSaveUser: (u, edit, id) => { const updated = edit ? users.map(old => old.id === id ? { ...old, ...u } : old) : [{ ...u, id: `u-${Date.now()}`, avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}` }, ...users]; handleUpdateUsers(updated); }, onDeleteUser: (id) => { const updated = users.filter(u => u.id !== id); handleUpdateUsers(updated); }, businessSettings, businessProfile, permissions }} />} />
-                                        <Route path="/chat-help" element={<AIAssistant {...{ currentUser, sales, products, expenses, customers, users, expenseRequests, cashCounts: cashCounts, goodsCosting: goodsCostings, goodsReceiving: goodsReceivings, anomalyAlerts, businessSettings, lowStockThreshold: 10, t, receiptSettings, permissions, setProducts: handleUpdateProducts, setSales: handleUpdateSales, createNotification: (target, title, message, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); }, notifications }} />} />
-                                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                                    </Routes>
-                                )
-                            )
-                        } />
-
                         <Route path="/directory" element={<Directory />} />
                         <Route path="/public-shopfront/:businessId" element={<PublicStorefront />} />
+
+                        {/* BUSINESS SELECTION GUARD */}
+                        <Route element={<ProtectedRoute isInitialized={isInitialized} currentUser={currentUser} activeBusinessId={activeBusinessId} requireBusiness={false} />}>
+                            <Route path="/select-business" element={<SelectBusiness currentUser={currentUser} onSelect={handleSelectBusiness} onLogout={() => handleLogout()} />} />
+                        </Route>
+
+                        {/* PROTECTED CORE ROUTES */}
+                        <Route element={<ProtectedRoute isInitialized={isInitialized} currentUser={currentUser} activeBusinessId={activeBusinessId} />}>
+                            <Route path="/dashboard" element={<Dashboard {...{ products, customers, users, sales, expenses, deposits, expenseRequests, anomalyAlerts, currentUser, businessProfile, businessSettings, ownerSettings, receiptSettings, permissions, t, lowStockThreshold: 10, isSafeMode: false, onApproveClientOrder: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'completed'} : x); handleUpdateSales(s); }, onRejectClientOrder: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'rejected'} : x); handleUpdateSales(s); }, onUpdateWithdrawalStatus: (uid, wid, st) => { const updated = users.map(u => u.id === uid ? {...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? {...w, status: st} : w)} : u); handleUpdateUsers(updated); }, handleUpdateCustomPaymentStatus: (uid, pid, st) => { const updated = users.map(u => u.id === uid ? {...u, customPayments: (u.withdrawals || []).map(p => p.id === pid ? {...p, status: st} : p)} : u); handleUpdateUsers(updated); }, onUpdateExpenseRequestStatus: (rid, st) => { const updated = expenseRequests.map(r => r.id === rid ? {...r, status: st} : r); handleUpdateExpenseRequests(updated); }, onUpdateDepositStatus: (did, st) => { const updated = deposits.map(d => d.id === did ? {...d, status: st} : d); handleUpdateDeposits(updated); }, onApproveBankSale: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'completed'} : x); handleUpdateSales(s); }, onRejectBankSale: (id) => { const s = sales.map(x => x.id === id ? {...x, status: 'rejected'} : x); handleUpdateSales(s); }, onDismissAnomaly: (id, reason) => { const a = anomalyAlerts.map(x => x.id === id ? {...x, isDismissed: true, dismissalReason: reason} : x); handleUpdateAnomalyAlerts(a); }, onMarkAnomalyRead: (id) => { const a = anomalyAlerts.map(x => x.id === id ? {...x, isRead: true} : x); handleUpdateAnomalyAlerts(a); } }} />} />
+                            <Route path="/inventory" element={<Inventory {...{ products, setProducts: handleUpdateProducts, t, receiptSettings, currentUser, users, handleSaveProduct: (p, edit) => { const updated = edit ? products.map(old => old.id === p.id ? p : old) : [p, ...products]; handleUpdateProducts(updated); }, onSaveStockAdjustment: (id, adj) => { const updated = products.map(p => { if (p.id === id) { const ns = adj.type === 'add' ? p.stock + adj.quantity : p.stock - adj.quantity; return { ...p, stock: ns, stockHistory: [{ date: new Date().toISOString(), userId: currentUser.id, ...adj, newStockLevel: ns }, ...(p.stockHistory || [])] }; } return p; }); handleUpdateProducts(updated); } }} />} />
+                            <Route path="/customers" element={<Customers {...{ customers, setCustomers: handleUpdateCustomers, t, receiptSettings }} />} />
+                            <Route path="/users" element={<Users {...{ users, sales, customers, t, currentUser, receiptSettings, permissions, ownerSettings, businessProfile, onSaveUser: (u, edit, id) => { const updated = edit ? users.map(old => old.id === id ? { ...old, ...u } : old) : [{ ...u, id: `u-${Date.now()}`, avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}` }, ...users]; handleUpdateUsers(updated); }, onDeleteUser: (id) => { const updated = users.filter(u => u.id !== id); handleUpdateUsers(updated); }, handleInitiateCustomPayment: (target, amt, desc) => { const p = { id: `cp-${Date.now()}`, dateInitiated: new Date().toISOString(), amount: amt, description: desc, status: 'pending_owner_approval', initiatedBy: currentUser.name, auditLog: [] }; const updated = users.map(u => u.id === target ? { ...u, customPayments: [p, ...(u.customPayments || [])] } : u); handleUpdateUsers(updated); } }} />} />
+                            <Route path="/receipts" element={<Receipts {...{ sales, customers, users, t, receiptSettings, currentUser, isTrialExpired: false, printerSettings, onDeleteSale: (id) => { const updated = sales.filter(s => s.id !== id); handleUpdateSales(updated); } }} />} />
+                            <Route path="/proforma" element={<Proforma {...{ sales, customers, users, t, receiptSettings, currentUser, isTrialExpired: false, printerSettings, onDeleteSale: (id) => { const updated = sales.filter(s => s.id !== id); handleUpdateSales(updated); } }} />} />
+                            <Route path="/items" element={<Items {...{ products, cart, t, receiptSettings, onUpdateCartItem: handleUpdateCartItem }} />} />
+                            <Route path="/counter" element={<Counter {...{ cart, customers, users, onUpdateCartItem: handleUpdateCartItem, onProcessSale: (sale) => { const s = [sale, ...sales]; handleUpdateSales(s); if(sale.status === 'completed') { const p = products.map(x => { const item = sale.items.find(i => i.product.id === x.id); return item ? {...x, stock: x.stock - item.quantity} : x; }); handleUpdateProducts(p); } }, onClearCart: () => setCart([]), receiptSettings, t, currentUser, businessSettings, printerSettings, isTrialExpired: false, permissions, bankAccounts, onAddCustomer: (c) => { const nc = { ...c, id: `c-${Date.now()}`, joinDate: new Date().toISOString(), purchaseHistory: [] }; handleUpdateCustomers([nc, ...customers]); return nc; } }} />} />
+                            <Route path="/expenses" element={<Expenses {...{ expenses, setExpenses: handleUpdateProducts, t, receiptSettings }} />} />
+                            <Route path="/expense-requests" element={<ExpenseRequestPage {...{ expenseRequests, expenses, currentUser, handleRequestExpense: (r) => handleUpdateExpenseRequests([{...r, id: `req-${Date.now()}`, date: new Date().toISOString(), userId: currentUser.id, status: 'pending'}, ...expenseRequests]), receiptSettings, t }} />} />
+                            <Route path="/profile" element={<MyProfile {...{ currentUser, users, sales, expenses, customers, products, receiptSettings, t, onRequestWithdrawal: (uid, amt, src) => { const w = { id: `wd-${Date.now()}`, date: new Date().toISOString(), amount: amt, status: 'pending', source: src, auditLog: [] }; const updated = users.map(u => u.id === uid ? { ...u, withdrawals: [w, ...(u.withdrawals || [])] } : u); handleUpdateUsers(updated); }, handleUpdateCustomPaymentStatus: (uid, pid, st) => { const updated = users.map(u => u.id === uid ? {...u, customPayments: (u.withdrawals || []).map(p => p.id === pid ? {...p, status: st} : p)} : u); handleUpdateUsers(updated); }, handleInitiateCustomPayment: (target, amt, desc) => { const p = { id: `cp-${Date.now()}`, dateInitiated: new Date().toISOString(), amount: amt, description: desc, status: 'pending_owner_approval', initiatedBy: currentUser.name, auditLog: [] }; const updated = users.map(u => u.id === target ? { ...u, customPayments: [p, ...(u.customPayments || [])] } : u); handleUpdateUsers(updated); }, onUpdateWithdrawalStatus: (uid, wid, st) => { const updated = users.map(u => u.id === uid ? {...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? {...w, status: st} : w)} : u); handleUpdateUsers(updated); }, onConfirmWithdrawalReceived: (uid, wid) => { const updated = users.map(u => u.id === uid ? {...u, withdrawals: (u.withdrawals || []).map(w => w.id === wid ? {...w, status: 'completed'} : w)} : u); handleUpdateUsers(updated); }, onSwitchUser: (u) => { setCurrentUser(u); setStoredItemAndDispatchEvent('fintab_simulator_session', u); window.location.reload(); }, onUpdateCurrentUserProfile: (p) => { const next = { ...currentUser, ...p }; setCurrentUser(next); const updated = users.map(u => u.id === currentUser.id ? next : u); handleUpdateUsers(updated); setStoredItemAndDispatchEvent('fintab_simulator_session', next); }, businessProfile, ownerSettings, businessSettings, companyValuations: [] }} />} />
+                            <Route path="/cash-count" element={<CashCountPage {...{ cashCounts, setCashCounts: handleUpdateCashCounts, users, sales, currentUser, receiptSettings, permissions, businessSettings, businessProfile, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} />} />
+                            <Route path="/bank-accounts" element={<BankAccountsPage {...{ bankAccounts, setBankAccounts: handleUpdateBankAccounts, bankTransactions, setBankTransactions: handleUpdateBankTransactions, receiptSettings, currentUser, users }} />} />
+                            <Route path="/goods-costing" element={<GoodsCostingPage {...{ goodsCostings, setGoodsCostings: handleUpdateGoodsCostings, products, setProducts: handleUpdateProducts, users, currentUser, receiptSettings, businessSettings, businessProfile, permissions, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} />} />
+                            <Route path="/goods-receiving" element={<GoodsReceivingPage {...{ goodsReceivings, setGoodsReceivings: handleUpdateGoodsReceivings, products, setProducts: handleUpdateProducts, users, currentUser, receiptSettings, businessSettings, businessProfile, permissions, createNotification: (target, title, msg, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message: msg, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} />} />
+                            <Route path="/weekly-inventory-check" element={<WeeklyInventoryCheckPage {...{ weeklyChecks, setWeeklyChecks: handleUpdateWeeklyChecks, products, users, currentUser, receiptSettings, businessSettings, businessProfile, permissions, createNotification: (target, title, message, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); } }} />} />
+                            <Route path="/alerts" element={<AlertsPage {...{ anomalyAlerts, onDismiss: (id, r) => handleUpdateAnomalyAlerts(anomalyAlerts.map(a => a.id === id ? {...a, isDismissed: true, dismissalReason: r} : a)), onMarkRead: (id) => handleUpdateAnomalyAlerts(anomalyAlerts.map(a => a.id === id ? {...a, isRead: true} : a)), receiptSettings, currentUser }} />} />
+                            <Route path="/settings" element={<Settings {...{ language, setLanguage: (l) => { setLanguage(l); localStorage.setItem(`fintab_${activeBusinessId}_lang`, l); persistData('lang', l); }, t, currentUser, receiptSettings, setReceiptSettings: (s) => { setReceiptSettings(s); persistData('receipt_settings', s); notify("Protocol Updated", "success"); }, theme, setTheme: (th) => { setTheme(th); localStorage.setItem(`fintab_${activeBusinessId}_theme`, th); persistData('theme', th); } }} />} />
+                            <Route path="/settings/receipts" element={<ReceiptSettings settings={receiptSettings} setSettings={(s) => { setReceiptSettings(s); persistData('receipt_settings', s); notify("Visual Identity Synced", "success"); }} t={t} />} />
+                            <Route path="/settings/permissions" element={<Permissions permissions={permissions} onUpdatePermissions={(p) => { setPermissions(p); persistData('permissions', p); notify("Access Matrix Authorized", "success"); }} t={t} users={users} />} />
+                            <Route path="/settings/business" element={<BusinessSettings settings={businessSettings} onUpdateSettings={(s) => { setBusinessSettings(s); persistData('settings', s); notify("Core Logic Synced", "success"); }} businessProfile={businessProfile} onUpdateBusinessProfile={(p) => { setBusinessProfile(p); persistData('profile', p); notify("Profile Updated", "success"); }} onResetBusiness={() => { if(confirm("Terminate node?")) { localStorage.clear(); window.location.reload(); } }} t={t} currentUser={currentUser} users={users} onUpdateCurrentUserProfile={(p) => { const next = { ...currentUser, ...p }; setCurrentUser(next); const updated = users.map(u => u.id === currentUser.id ? next : u); handleUpdateUsers(updated); setStoredItemAndDispatchEvent('fintab_simulator_session', next); }} />} />
+                            <Route path="/settings/owner" element={<OwnerSettingsPage ownerSettings={ownerSettings} onUpdate={(s) => { setOwnerSettings(s); persistData('owner_settings', s); notify("Override Applied", "success"); }} t={t} />} />
+                            <Route path="/settings/printer" element={<PrinterSettings settings={printerSettings} onUpdateSettings={(s) => { setPrinterSettings(s); persistData('printer_settings', s); notify("Hardware Synced", "success"); }} />} />
+                            <Route path="/today" element={<Today {...{ sales, customers, expenses, products, t, receiptSettings }} />} />
+                            <Route path="/reports" element={<Reports {...{ sales, products, expenses, customers, users, t, receiptSettings, currentUser, permissions, ownerSettings }} />} />
+                            <Route path="/transactions" element={<Transactions {...{ sales, deposits, bankAccounts, users, receiptSettings, currentUser, onRequestDeposit: (amt, desc, bid) => { const d = { id: `dep-${Date.now()}`, date: new Date().toISOString(), amount: amt, description: desc, userId: currentUser.id, status: 'pending', bankAccountId: bid }; handleUpdateDeposits([d, ...deposits]); }, t }} />} />
+                            <Route path="/commission" element={<Commission {...{ products, setProducts: handleUpdateProducts, t, receiptSettings }} />} />
+                            <Route path="/investors" element={<InvestorPage {...{ users, sales, expenses, products, t, receiptSettings, currentUser, onSaveUser: (u, edit, id) => { const updated = edit ? users.map(old => old.id === id ? { ...old, ...u } : old) : [{ ...u, id: `u-${Date.now()}`, avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}` }, ...users]; handleUpdateUsers(updated); }, onDeleteUser: (id) => { const updated = users.filter(u => u.id !== id); handleUpdateUsers(updated); }, businessSettings, businessProfile, permissions }} />} />
+                            <Route path="/chat-help" element={<AIAssistant {...{ currentUser, sales, products, expenses, customers, users, expenseRequests, cashCounts: cashCounts, goodsCosting: goodsCostings, goodsReceiving: goodsReceivings, anomalyAlerts, businessSettings, lowStockThreshold: 10, t, receiptSettings, permissions, setProducts: handleUpdateProducts, setSales: handleUpdateSales, createNotification: (target, title, message, type, link) => { const n = { id: `notif-${Date.now()}`, userId: target, title, message, timestamp: new Date().toISOString(), isRead: false, type, link }; handleUpdateNotifications([n, ...notifications]); }, notifications }} />} />
+                        </Route>
+
+                        {/* DEFAULT REDIRECT */}
                         <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
                     </Routes>
                 </main>
             </div>
