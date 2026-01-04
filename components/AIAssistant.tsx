@@ -1,10 +1,8 @@
 
 // @ts-nocheck
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GoogleGenAI, Type } from "@google/genai";
-import { AIIcon, WarningIcon, SearchIcon } from '../constants';
+import { AIIcon, SearchIcon } from '../constants';
 import type { User, Sale, Product, Expense, Customer, ExpenseRequest, CashCount, GoodsCosting, GoodsReceiving, AnomalyAlert, BusinessSettingsData, ReceiptSettingsData, AppPermissions, AppNotification } from '../types';
-import { notify } from './Toast';
 
 interface AIAssistantProps {
     currentUser: User;
@@ -40,27 +38,6 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     const [isLoading, setIsLoading] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    // Agentic Toolset for FinTab OS
-    const tools = useMemo(() => [
-        {
-            functionDeclarations: [
-                {
-                    name: 'adjust_stock',
-                    description: 'Directly modify inventory levels for a product based on operator command.',
-                    parameters: {
-                        type: Type.OBJECT,
-                        properties: {
-                            productId: { type: Type.STRING, description: 'The product ID, name, or SKU.' },
-                            quantity: { type: Type.NUMBER, description: 'Amount to change (positive for add, negative for remove).' },
-                            reason: { type: Type.STRING, description: 'Rationale for the manual shift.' }
-                        },
-                        required: ['productId', 'quantity', 'reason']
-                    }
-                }
-            ]
-        }
-    ], []);
-
     const contextStr = useMemo(() => {
         const cs = receiptSettings?.currencySymbol || '$';
         let str = `[FINTAB OS CONTEXT: ${receiptSettings?.businessName || 'Active Node'}]\n`;
@@ -68,13 +45,13 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         str += `- Inventory Size: ${products?.length || 0} items\n`;
         const rev = (sales || []).filter(s => s.status === 'completed').reduce((s, x) => s + (x.total || 0), 0);
         str += `- Lifetime Revenue: ${cs}${rev.toFixed(2)}\n`;
-        str += `\n[LEDGER DATA (TOP 10)]\n` + (products || []).slice(0, 10).map(p => `- ${p.name}: ${p.stock} units @ ${cs}${p.price}`).join('\n');
+        str += `\n[TOP PRODUCTS]\n` + (products || []).slice(0, 5).map(p => `- ${p.name}: ${p.stock} in stock`).join('\n');
         return str;
     }, [sales, products, receiptSettings, currentUser]);
 
     useEffect(() => {
         if (messages.length === 0) {
-            setMessages([{ role: 'model', text: "Intelligence Node Initialized. Systems nominal. I have access to your terminal context. How can I assist with your operations today?", type: 'success' }]);
+            setMessages([{ role: 'model', text: "Intelligence Node Initialized. Secure backend bridge active. How can I assist with your operations today?", type: 'success' }]);
         }
     }, []);
 
@@ -86,65 +63,31 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         setInput('');
         setIsLoading(true);
 
-        const API_KEY = process.env.API_KEY;
-
-        if (!API_KEY || API_KEY === "") {
-            setMessages(prev => [...prev, { 
-                role: 'model', 
-                text: "CRITICAL FAULT: API Key missing in environment. Ensure the 'API_KEY' secret is configured in your deployment settings.", 
-                type: 'error' 
-            }]);
-            setIsLoading(false);
-            return;
-        }
-
         try {
-            const ai = new GoogleGenAI({ apiKey: API_KEY });
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-pro-preview',
-                contents: [
-                    { text: `SYSTEM CONTEXT:\n${contextStr}` },
-                    { text: `OPERATOR INSTRUCTION: ${operatorInput}` }
-                ],
-                config: {
-                    tools: tools,
-                    systemInstruction: "You are the FinTab OS Intelligence Core. Act as an expert operations agent. Be technical, efficient, and proactive. Use the adjust_stock tool only when explicitly asked to change inventory. Analyze data accurately when asked for reports or summaries."
-                }
+            const prompt = `SYSTEM CONTEXT:\n${contextStr}\n\nOPERATOR INSTRUCTION: ${operatorInput}\n\nAct as the FinTab OS Intelligence Core. Provide concise, technical, and professional advice for terminal operations.`;
+
+            const response = await fetch("/api/gemini", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt }),
             });
 
-            let finalResponseText = response.text || "";
-
-            if (response.functionCalls && response.functionCalls.length > 0) {
-                for (const fc of response.functionCalls) {
-                    if (fc.name === 'adjust_stock') {
-                        const { productId, quantity, reason } = fc.args;
-                        const product = products.find(p => p.id === productId || p.sku === productId || p.name.toLowerCase() === productId.toLowerCase());
-                        
-                        if (product) {
-                            const nextStock = (product.stock || 0) + quantity;
-                            const updated = products.map(p => p.id === product.id ? { ...p, stock: nextStock } : p);
-                            setProducts(updated);
-                            finalResponseText += `\n\n[PROTOCOL SYNC: Authorized ${quantity} unit shift for "${product.name}". New Balance: ${nextStock}. Rationale: ${reason}.]`;
-                            notify("Inventory logic updated by AI", "success");
-                        } else {
-                            finalResponseText += `\n\n[SYNC FAILURE: Identifier "${productId}" not found in current ledger.]`;
-                        }
-                    }
-                }
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Backend Node Failure");
             }
+            
+            const data = await response.json();
+            const finalResponseText = data.text || "Communication protocol timed out. No data received.";
 
             setMessages(prev => [...prev, { role: 'model', text: finalResponseText.trim() }]);
         } catch (error) {
             console.error("AI Communication Breach:", error);
-            let errorMessage = "Protocol Error: Intelligence node handshake failed. Please verify API availability.";
-            
-            if (error.message?.includes("API key not valid")) {
-                errorMessage = "Security Error: Authorized credentials (API Key) rejected by gateway.";
-            } else if (error.message?.includes("User location is not supported")) {
-                errorMessage = "Regional Constraint: Gemini API is currently restricted in your geographic node.";
-            }
-            
-            setMessages(prev => [...prev, { role: 'model', text: errorMessage, type: 'error' }]);
+            setMessages(prev => [...prev, { 
+                role: 'model', 
+                text: `Protocol Error: ${error.message || "Intelligence node handshake failed."}`, 
+                type: 'error' 
+            }]);
         } finally {
             setIsLoading(false);
         }
@@ -163,15 +106,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                         <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 border-4 border-white dark:border-gray-900 rounded-full animate-pulse"></div>
                     </div>
                     <div>
-                        <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 dark:text-white">OS Intelligence Node</h2>
-                        <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Grid Identity: {currentUser.role} Node</span>
-                        </div>
+                        <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900 dark:text-white">Intelligence Node</h2>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Status: Secure Backend Bridge</p>
                     </div>
-                </div>
-                <div className="hidden md:flex items-center gap-4 bg-slate-50 dark:bg-gray-800 px-6 py-2 rounded-full border dark:border-gray-700">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Status:</p>
-                    <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Active & Synced</span>
                 </div>
             </header>
 
@@ -183,9 +120,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
                                 ? 'bg-primary text-white rounded-br-none shadow-xl shadow-primary/20' 
                                 : m.type === 'error'
                                     ? 'bg-rose-50 dark:bg-rose-950/30 border-2 border-rose-100 dark:border-rose-900/30 text-rose-700 dark:text-rose-400 rounded-bl-none'
-                                    : m.type === 'success'
-                                        ? 'bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-100 dark:border-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-bl-none'
-                                        : 'bg-white dark:bg-gray-900 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-200 dark:border-gray-800 shadow-xl'
+                                    : 'bg-white dark:bg-gray-900 text-slate-800 dark:text-slate-200 rounded-bl-none border border-slate-200 dark:border-gray-800 shadow-xl'
                         }`}>
                             <div className="flex items-start gap-4">
                                 {m.role === 'model' && <AIIcon className="w-5 h-5 mt-1 flex-shrink-0 opacity-40" />}
