@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { User, AdminBusinessData } from '../types';
@@ -6,7 +5,7 @@ import { getStoredItem, setStoredItemAndDispatchEvent } from '../lib/utils';
 import { BuildingIcon, LogoutIcon, PlusIcon, FINTAB_LOGO_SVG } from '../constants';
 
 interface SelectBusinessProps {
-    currentUser: User;
+    currentUser: User | null;
     onSelect: (businessId: string) => void;
     onLogout: () => void;
 }
@@ -17,6 +16,8 @@ const SelectBusiness: React.FC<SelectBusinessProps> = ({ currentUser, onSelect, 
     const [error, setError] = useState<string | null>(null);
 
     const myBusinesses = useMemo(() => {
+        if (!currentUser?.email) return [];
+        
         const registry = getStoredItem<AdminBusinessData[]>('fintab_businesses_registry', []);
         
         if (currentUser.email === 'demo@fintab.io') {
@@ -25,11 +26,11 @@ const SelectBusiness: React.FC<SelectBusinessProps> = ({ currentUser, onSelect, 
         }
 
         return registry.filter(b => {
-            if (b.owner.email.toLowerCase() === currentUser.email.toLowerCase()) return true;
+            if (b.owner.email && b.owner.email.toLowerCase() === currentUser.email.toLowerCase()) return true;
             const users = getStoredItem<User[]>(`fintab_${b.id}_users`, []);
-            return users.some(u => u.email.toLowerCase() === currentUser.email.toLowerCase());
+            return users.some(u => u.email && u.email.toLowerCase() === currentUser.email.toLowerCase());
         });
-    }, [currentUser.email]);
+    }, [currentUser?.email]);
 
     const handleJoin = (e: React.FormEvent) => {
         e.preventDefault();
@@ -42,6 +43,8 @@ const SelectBusiness: React.FC<SelectBusinessProps> = ({ currentUser, onSelect, 
     };
 
     const handleForceInitialize = () => {
+        if (!currentUser) return;
+        
         const businessId = `biz-${Date.now()}`;
         const newEntry: AdminBusinessData = {
             id: businessId,

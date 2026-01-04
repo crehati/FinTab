@@ -111,14 +111,29 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, userToEd
 
                 if (inviteErr) throw inviteErr;
 
-                // BULLETPROOF LINK GENERATION:
-                // We take the full current URL and strip everything after the '#'
-                // This handles cases where the app is in a subfolder or has 'index.html' in the URL.
                 const baseUrl = window.location.href.split('#')[0];
                 const link = `${baseUrl}#/join/${data.id}`;
                 
                 setInvitationLink(link);
-                notify("Invitation Link Generated", "success");
+
+                // Dispatch automated email via backend node
+                try {
+                    await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            to: formData.email,
+                            businessName: receiptSettings.businessName,
+                            role: formData.customRoleName || formData.role,
+                            inviteLink: link,
+                            inviterName: currentUser?.name || 'Principal Owner'
+                        })
+                    });
+                    notify("Identity Handshake Transmitted via Email", "success");
+                } catch (emailErr) {
+                    console.error("Email delivery protocol failed", emailErr);
+                    notify("Manual Handshake Required: Email delivery failure", "warning");
+                }
             }
             
             await onSave(dataToSave, isEditing);
@@ -170,13 +185,13 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, onSave, userToEd
                         <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path d="M5 13l4 4L19 7" /></svg>
                     </div>
                     <div>
-                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Invite Ready</h3>
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-2 px-6">Send this link to {formData.name}. If they see a 404, ensure they are using a modern browser.</p>
+                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Invite Transmitted</h3>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-2 px-6">A secure access protocol was emailed to {formData.email}. If automated delivery fails, use the backup link below.</p>
                     </div>
                     <div className="bg-slate-50 p-4 rounded-2xl border-2 border-dashed border-slate-200 break-all text-[10px] font-mono font-bold text-primary select-all">
                         {invitationLink}
                     </div>
-                    <button onClick={handleCopyLink} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Copy Invitation Link</button>
+                    <button onClick={handleCopyLink} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Copy Backup Link</button>
                 </div>
             ) : (
                 <div className="space-y-6">
